@@ -60,18 +60,19 @@ function encerrar(filho) {
   filho.stdout.on('data', d => { saida += d; }); filho.stderr.on('data', d => { saida += d; });
   filho.on('exit', code => { if (code) console.log('O programa terminou com código ' + code); });
 
+  let pagina = null;
+  const erros = [];
+  const mensagens = [];
   try {
     await aguardar('http://127.0.0.1:' + porta + '/json/version', 60000);
     const browser = await chromium.connectOverCDP('http://127.0.0.1:' + porta);
-    let pagina;
     for (let i = 0; i < 60 && !pagina; i++) {
       pagina = browser.contexts().flatMap(c => c.pages()).find(p => p.url().startsWith('app://local/'));
       if (!pagina) await espera(500);
     }
     assert.ok(pagina, 'a janela do programa abriu (app://local/)');
-    const erros = [];
     pagina.on('pageerror', e => erros.push(e.message));
-    pagina.on('console', m => { if (m.type() === 'error') erros.push(m.text()); });
+    pagina.on('console', m => { mensagens.push(m.type() + ': ' + m.text()); if (m.type() === 'error') erros.push(m.text()); });
     await pagina.reload();
     await pagina.waitForSelector('.compra', { timeout: 30000 });
     assert.equal((await pagina.textContent('#s-total')).replace(/ /g, ' '), 'R$ 1.311,31');
@@ -93,6 +94,16 @@ function encerrar(filho) {
     await browser.close();
   } catch (e) {
     console.error('FALHOU:', e && e.message ? e.message : e);
+    if (pagina) {
+      try {
+        console.error('--- o que a tela mostra ---\n' + await pagina.evaluate(() => document.body.innerText.slice(0, 700)));
+        console.error('--- estado ---\n' + JSON.stringify(await pagina.evaluate(async () => ({
+          url: location.href, config: window.Contas && window.Contas.ponte ? await window.Contas.ponte.chamar('config:get').catch(x => ({ erro: x })) : 'sem ponte',
+          compras: document.querySelectorAll('[data-compra]').length, status: document.querySelector('#save') && document.querySelector('#save').textContent
+        }))));
+      } catch (x) { console.error('(não foi possível ler a tela: ' + x.message + ')'); }
+    }
+    console.error('--- console da tela ---\n' + mensagens.join('\n').slice(-2000) + '\n--- erros ---\n' + erros.join('\n'));
     console.error('--- saída do programa ---\n' + saida.slice(-3000));
     encerrar(filho);
     process.exit(1);

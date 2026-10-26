@@ -139,7 +139,7 @@ function registerIpc() {
     V.colecao(coll); V.numeroDeAssinatura(subId);
     const wc = e.sender;
     const key = wc.id + ':' + subId;
-    if (subs.has(key)) return true;
+    if (subs.has(key)) { subs.get(key)(); subs.delete(key); } // repetida: troca pela nova, que sempre entrega o primeiro retrato dos dados
     let ultima = 0;
     const push = async () => {
       if (wc.isDestroyed()) return;

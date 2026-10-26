@@ -17,7 +17,8 @@
 
   /* ---------- banco de dados ---------- */
   const assinaturas = new Map();
-  let proxima = 1;
+  // Cada carregamento da tela começa de um número diferente: assinaturas atrasadas de uma tela antiga nunca se confundem com as da nova.
+  let proxima = Math.floor(Math.random() * 1e12) + 1;
   const instantaneo = docs => ({
     docs: docs.map(x => ({ id: x.id, exists: true, data: () => structuredClone(x.data) })),
     size: docs.length, empty: docs.length === 0
