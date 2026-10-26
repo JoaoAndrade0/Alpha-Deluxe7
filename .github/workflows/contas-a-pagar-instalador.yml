@@ -1,14 +1,27 @@
-name: Contas a Pagar - gerar instaladores
+name: Contas a Pagar - testes e instaladores
 
 # Como usar:
-#   1) Actions > "Contas a Pagar - gerar instaladores" > Run workflow  (gera os arquivos para baixar)
-#   2) Ou crie uma tag "contas-v1.0.0": além de gerar, publica em Releases para facilitar o download.
+#   - A cada envio ao ramo contas-a-pagar-desktop: roda os testes e gera os instaladores (aba Actions > execução > Artifacts).
+#   - Para publicar em Releases: crie uma tag "contas-v1.0.0". Além de gerar, publica os instaladores com o arquivo de conferência SHA256SUMS.txt.
+#   - Também dá para rodar à mão: Actions > "Contas a Pagar - testes e instaladores" > Run workflow (depois que o arquivo estiver no ramo principal).
 
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - 'contas-v*'
+    branches: [contas-a-pagar-desktop]
+    tags: ['contas-v*']
+  pull_request:
+    paths:
+      - 'contas-a-pagar-desktop/**'
+      - '.github/workflows/contas-a-pagar-instalador.yml'
+  workflow_dispatch:
+
+# Permissão mínima: só ler o código. Quem precisa de mais (publicar em Releases) pede no próprio trabalho.
+permissions:
+  contents: read
+
+concurrency:
+  group: contas-a-pagar-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -16,40 +29,76 @@ defaults:
 
 jobs:
   testes:
+    name: Testes (unidade, segurança das dependências e programa aberto)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: contas-a-pagar-desktop/package-lock.json
       - run: npm ci
-      - run: npm test
+      - name: Dependências sem falhas conhecidas de gravidade alta
+        run: npm run audit
+      - name: Testes de unidade
+        run: npm test
+      - name: Programa aberto de verdade (teste completo)
+        env:
+          OUT: ${{ runner.temp }}/capturas
+        run: xvfb-run -a node test/e2e/run.js
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: capturas-de-tela-dos-testes
+          path: ${{ runner.temp }}/capturas
+          if-no-files-found: ignore
 
   instalador:
+    name: Instalador (${{ matrix.nome }})
     needs: testes
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            alvo: --win
             nome: windows
+            alvo: --win
+            executavel: dist/win-unpacked/Contas a Pagar.exe
           - os: macos-latest
-            alvo: --mac
             nome: mac
+            alvo: --mac
+            executavel: dist/mac-arm64/Contas a Pagar.app/Contents/MacOS/Contas a Pagar
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: contas-a-pagar-desktop/package-lock.json
       - run: npm ci
-      - run: npx electron-builder ${{ matrix.alvo }} --publish never
-      - uses: actions/upload-artifact@v4
+      - name: Gerar o instalador
+        run: npx electron-builder ${{ matrix.alvo }} --publish never
+      - name: Abrir o programa empacotado e conferir (teste de fumaça)
+        shell: bash
+        env:
+          OUT: ${{ runner.temp }}/fumaca
+        run: node test/smoke/empacotado.js "${{ matrix.executavel }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: teste-de-fumaca-${{ matrix.nome }}
+          path: ${{ runner.temp }}/fumaca
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: instalador-${{ matrix.nome }}
           path: |
@@ -58,20 +107,30 @@ jobs:
           if-no-files-found: error
 
   publicar:
-    if: startsWith(github.ref, 'refs/tags/')
+    name: Publicar em Releases
+    if: startsWith(github.ref, 'refs/tags/contas-v')
     needs: instalador
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     defaults:
       run:
         working-directory: .
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
+          pattern: instalador-*
           path: instaladores
           merge-multiple: true
-      - name: Publicar em Releases
+      - name: Arquivo de conferência (SHA-256)
+        working-directory: instaladores
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publicar
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" instaladores/* --repo "${{ github.repository }}" --title "Contas a Pagar ${{ github.ref_name }}" --notes "Instaladores do programa Contas a Pagar. No Windows, baixe o arquivo .exe. No Mac, baixe o .dmg."
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release create "$TAG" instaladores/* --repo "$REPO" --title "Contas a Pagar $TAG" \
+            --notes "Instaladores do programa Contas a Pagar. No Windows, baixe o arquivo .exe. No Mac, baixe o .dmg (Apple Silicon: arm64; Intel: x64). Para conferir o download, compare o SHA-256 do arquivo com o do SHA256SUMS.txt."

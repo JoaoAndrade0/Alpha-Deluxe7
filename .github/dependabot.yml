@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /contas-a-pagar-desktop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14   # só propõe versões com pelo menos duas semanas de publicadas
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14

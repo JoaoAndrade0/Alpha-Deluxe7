@@ -12,6 +12,11 @@ const { criarLimitador } = require('./lib/limites');
 const M = require('./renderer/lib/meses');
 
 app.setAppUserModelId('br.com.alphadeluxe7.contasapagar');
+// Sem rede em segundo plano do Chromium (atualização de componentes, relatórios de falha, listas de segurança):
+// o programa só se conecta à internet quando você envia uma nota para o Claude ler.
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-component-update');
+app.commandLine.appendSwitch('no-pings');
 // Para testes automáticos: permite apontar os dados do programa para outra pasta.
 if (process.env.CONTAS_USER_DATA) app.setPath('userData', process.env.CONTAS_USER_DATA);
 
@@ -26,8 +31,8 @@ const HOSTS_EXTERNOS = new Set(['console.anthropic.com']); // único site que o 
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
+  "style-src 'self'",
+  "font-src 'self'",
   "img-src 'self' data: blob:",
   "worker-src 'self' blob:",
   "connect-src 'self'",
@@ -40,7 +45,7 @@ const CSP = [
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif',
-  '.pdf': 'application/pdf', '.wasm': 'application/wasm', '.bcmap': 'application/octet-stream', '.pfb': 'application/octet-stream'
+  '.pdf': 'application/pdf', '.wasm': 'application/wasm', '.woff2': 'font/woff2', '.bcmap': 'application/octet-stream', '.pfb': 'application/octet-stream'
 };
 const SEGURANCA_HEADERS = {
   'X-Content-Type-Options': 'nosniff',

@@ -65,11 +65,13 @@
       const st = C.statusDoMes(m, k, hoje);
       html += '<li class="m' + (k === hoje ? ' now' : '') + '">' +
         '<div class="when"><b>' + (k - lo + 1) + 'º mês</b><span>' + kLong(k) + (k === hoje ? ' · este mês' : '') + '</span></div>' +
-        '<div class="bar" aria-hidden="true"><span class="due" style="width:' + (m.due / maior * 100) + '%"><b style="width:' + (m.due ? m.paid / m.due * 100 : 0) + '%"></b></span></div>' +
+        '<div class="bar" aria-hidden="true"><span class="due" data-w="' + (m.due / maior * 100) + '"><b data-w="' + (m.due ? m.paid / m.due * 100 : 0) + '"></b></span></div>' +
         '<div class="amt">' + fmt(m.due) + '</div>' +
         '<div class="st ' + st.cls + '">' + ROTULO_STATUS[st.cls](st.falta) + '</div></li>';
     }
     lista.innerHTML = html;
+    // Larguras das barras pelo CSSOM: assim a política de segurança não precisa liberar estilo dentro do HTML.
+    lista.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.dataset.w + '%'; });
   }
 
   /* ---------- serviços e compras ---------- */

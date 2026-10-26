@@ -9,6 +9,9 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
+    "test:e2e": "xvfb-run -a node test/e2e/run.js",
+    "test:smoke": "node test/smoke/empacotado.js",
+    "audit": "npm audit --omit=dev --audit-level=high",
     "dist": "electron-builder --publish never"
   },
   "dependencies": {
@@ -16,8 +19,10 @@
     "pdfjs-dist": "6.4.299"
   },
   "devDependencies": {
+    "axe-core": "4.13.0",
     "electron": "44.9.3",
-    "electron-builder": "26.17.0"
+    "electron-builder": "26.17.0",
+    "playwright": "1.63.0"
   },
   "build": {
     "appId": "br.com.alphadeluxe7.contasapagar",
@@ -61,6 +66,18 @@
       "icon": "build/icon.png",
       "category": "public.app-category.finance",
       "artifactName": "ContasAPagar-${version}-${arch}.${ext}"
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
     }
-  }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": "github:JoaoAndrade0/Alpha-Deluxe7"
 }
