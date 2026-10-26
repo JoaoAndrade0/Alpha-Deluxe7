@@ -136,5 +136,10 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
-          gh release create "$TAG" instaladores/* --repo "$REPO" --title "Contas a Pagar $TAG" \
-            --notes "Instaladores do programa Contas a Pagar. No Windows, baixe o arquivo .exe. No Mac, baixe o .dmg (Apple Silicon: arm64; Intel: x64). Para conferir o download, compare o SHA-256 do arquivo com o do SHA256SUMS.txt."
+          if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            # a publicação já foi criada pela página do GitHub: só anexa os instaladores
+            gh release upload "$TAG" instaladores/* --repo "$REPO" --clobber
+          else
+            gh release create "$TAG" instaladores/* --repo "$REPO" --title "Contas a Pagar $TAG" \
+              --notes "Instaladores do programa Contas a Pagar. No Windows, baixe o arquivo .exe. No Mac, baixe o .dmg (Apple Silicon: arm64; Intel: x64). Para conferir o download, compare o SHA-256 do arquivo com o do SHA256SUMS.txt."
+          fi
