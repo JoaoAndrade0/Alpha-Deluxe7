@@ -23,6 +23,7 @@
       inicio: isNaN(M.ymKey(d.inicio)) ? M.keyYm(chaveHoje) : d.inicio,
       pagas: objetoSimples(d.pagas) ? d.pagas : {},
       ordem: Number(d.ordem) || 0,
+      ancora: d.ancora === 'parcela' ? 'parcela' : 'total', // qual valor a pessoa digitou por último
       conferir: d.conferir === true,
       leitura: texto(d.leitura, 600),
       notaId: /^[A-Za-z0-9_-]{8,64}$/.test(d.notaId || '') ? d.notaId : '',
@@ -30,6 +31,27 @@
       dataCompra: M.dataValida(d.dataCompra) ? d.dataCompra : ''
     };
   };
+
+  // O que gravar quando a pessoa edita um campo do valor. O valor digitado por último (total ou parcela) é o que
+  // manda quando o número de parcelas muda; assim nada digitado à mão é apagado por um cálculo.
+  const limitar = v => Math.min(D.MAX_CENTS, v);
+  function aplicarEdicao(c, campo, valor) {
+    const n = c.parcelas;
+    if (campo === 'total') return { totalCents: valor, parcelaCents: Math.round(valor / n), ancora: 'total' };
+    if (campo === 'parcela') {
+      // total zerado: o total acompanha a parcela; com total já informado, ele fica como está (e a tela avisa se não bater)
+      return c.totalCents === 0
+        ? { parcelaCents: valor, totalCents: limitar(valor * n), ancora: 'parcela' }
+        : { parcelaCents: valor, ancora: 'parcela' };
+    }
+    if (campo === 'parcelas') {
+      const pelaParcela = (c.ancora === 'parcela' || c.totalCents === 0) && c.parcelaCents > 0;
+      return pelaParcela
+        ? { parcelas: valor, totalCents: limitar(c.parcelaCents * valor) }
+        : { parcelas: valor, parcelaCents: Math.round(c.totalCents / valor) };
+    }
+    throw new Error('Campo desconhecido: ' + campo);
+  }
 
   const porOrdem = (a, b) => (a[1].ordem - b[1].ordem) || (a[0] < b[0] ? -1 : 1);
   const estaPaga = (c, i) => c.pagas[i] === true;
@@ -86,5 +108,5 @@
     return { cls: 'open', falta };
   }
 
-  return { MAX_PARCELAS, normServico, normCompra, porOrdem, estaPaga, contarPagas, resumoCompra, totaisGerais, totaisServico, statusDoMes };
+  return { MAX_PARCELAS, normServico, normCompra, aplicarEdicao, porOrdem, estaPaga, contarPagas, resumoCompra, totaisGerais, totaisServico, statusDoMes };
 });

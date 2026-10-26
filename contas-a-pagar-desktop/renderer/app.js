@@ -355,13 +355,13 @@
     if (f === 'desc') mudanca = { descricao: t.value.trim() };
     else if (f === 'total') {
       const v = parseMoney(t.value); if (Number.isNaN(v)) return desfazer();
-      t.value = fmtNum(v); mudanca = { totalCents: v, parcelaCents: Math.round(v / c.parcelas) };
+      t.value = fmtNum(v); mudanca = C.aplicarEdicao(c, 'total', v);
     } else if (f === 'parcelas') {
       const n = Number(t.value); if (!(Number.isInteger(n) && n >= 1 && n <= C.MAX_PARCELAS)) return desfazer();
-      mudanca = { parcelas: n, parcelaCents: Math.round(c.totalCents / n) };
+      mudanca = C.aplicarEdicao(c, 'parcelas', n);
     } else if (f === 'parcela') {
       const v = parseMoney(t.value); if (Number.isNaN(v)) return desfazer();
-      t.value = fmtNum(v); mudanca = { parcelaCents: v };
+      t.value = fmtNum(v); mudanca = C.aplicarEdicao(c, 'parcela', v);
     } else if (f === 'inicio') mudanca = { inicio: t.value };
     if (!mudanca) return;
     for (const k of Object.keys(mudanca)) if (mudanca[k] === c[k]) delete mudanca[k]; // só grava o que mudou

@@ -15,6 +15,7 @@
     img: 'Não consegui abrir essa imagem. Envie JPG, PNG ou PDF.',
     too_large: 'Esse arquivo é grande demais. Envie uma foto menor ou um PDF mais leve.',
     pdf: 'Não consegui abrir o PDF. Envie uma foto ou um print da nota.',
+    sem_gravar: 'Li a nota, mas não consegui salvar a compra na pasta de dados. Confira a pasta e tente de novo: a nota não será lida (nem cobrada) outra vez.',
     nao_nota: 'Isso não parece uma nota, cupom ou comprovante.',
     invalid_json: 'Não consegui ler essa nota. Tente uma foto mais nítida, de frente e com a nota inteira.',
     refused: 'Não consegui ler essa nota. Tente uma foto mais nítida, de frente e com a nota inteira.',

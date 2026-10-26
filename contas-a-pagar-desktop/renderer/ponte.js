@@ -59,14 +59,20 @@
   });
 
   // Manda as imagens da nota; o programa devolve os dados da compra já conferidos.
+  // O cancelamento é registrado antes de qualquer espera: cancelar durante a preparação das imagens
+  // também impede que o pedido (pago) seja enviado.
   async function lerNota(imagens, sinal) {
-    if (sinal && sinal.aborted) throw { code: 'cancelled', message: 'Cancelado.' };
-    const images = await Promise.all(imagens.map(async b => ({ media_type: b.type || 'image/jpeg', data: await emBase64(b) })));
+    const cancelado = () => ({ code: 'cancelled', message: 'Cancelado.' });
+    if (sinal && sinal.aborted) throw cancelado();
     const reqId = novoId();
-    const aoCancelar = () => chamar('nota:cancel', reqId).catch(() => {});
+    let foiCancelado = false;
+    const aoCancelar = () => { foiCancelado = true; chamar('nota:cancel', reqId).catch(() => {}); };
     if (sinal) sinal.addEventListener('abort', aoCancelar, { once: true });
-    try { return await chamar('nota:ler', { reqId, images }); }
-    finally { if (sinal) sinal.removeEventListener('abort', aoCancelar); }
+    try {
+      const images = await Promise.all(imagens.map(async b => ({ media_type: b.type || 'image/jpeg', data: await emBase64(b) })));
+      if (foiCancelado || (sinal && sinal.aborted)) throw cancelado();
+      return await chamar('nota:ler', { reqId, images });
+    } finally { if (sinal) sinal.removeEventListener('abort', aoCancelar); }
   }
 
   // Guarda a foto ou o PDF original na pasta compartilhada e devolve o identificador.

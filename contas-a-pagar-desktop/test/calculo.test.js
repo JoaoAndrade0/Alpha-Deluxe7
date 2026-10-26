@@ -92,3 +92,41 @@ test('ordenação por ordem, com desempate pelo identificador', () => {
   const m = new Map([['b', { ordem: 2 }], ['a', { ordem: 2 }], ['c', { ordem: 1 }]]);
   assert.deepEqual([...m].sort(C.porOrdem).map(([id]) => id), ['c', 'a', 'b']);
 });
+
+test('editar valores: o último que a pessoa digitou (total ou parcela) é o que manda', () => {
+  const nova = () => C.normCompra({ servicoId: 's', parcelas: 1 }, HOJE);
+  const aplica = (c, campo, v) => Object.assign(c, C.aplicarEdicao(c, campo, v));
+
+  // fluxo A: digita a parcela do cartão primeiro; mudar o número de parcelas não apaga o que foi digitado
+  let c = nova();
+  aplica(c, 'parcela', 15509);
+  assert.deepEqual([c.totalCents, c.parcelaCents, c.ancora], [15509, 15509, 'parcela'], 'com total zerado, o total acompanha a parcela');
+  aplica(c, 'parcelas', 3);
+  assert.deepEqual([c.parcelas, c.parcelaCents, c.totalCents], [3, 15509, 46527], 'a parcela digitada fica; o total vira 3 x 155,09');
+
+  // fluxo B: digita o total e as parcelas; a parcela é calculada
+  c = nova();
+  aplica(c, 'total', 46528);
+  aplica(c, 'parcelas', 3);
+  assert.deepEqual([c.totalCents, c.parcelas, c.parcelaCents, c.ancora], [46528, 3, 15509, 'total']);
+  aplica(c, 'parcelas', 4);
+  assert.equal(c.parcelaCents, 11632, 'mudar parcelas com o total em primeiro lugar divide o total de novo');
+
+  // fluxo C: corrige a parcela depois (o cartão cobrou centavos a mais): o total informado fica, e a diferença aparece
+  c = nova(); aplica(c, 'total', 46528); aplica(c, 'parcelas', 3); aplica(c, 'parcela', 15510);
+  assert.deepEqual([c.totalCents, c.parcelaCents, c.ancora], [46528, 15510, 'parcela']);
+  assert.notEqual(C.resumoCompra(c).soma, c.totalCents, 'o aviso "as parcelas somam..." continua valendo');
+  aplica(c, 'parcelas', 2);
+  assert.deepEqual([c.parcelaCents, c.totalCents], [15510, 31020], 'depois de digitar a parcela, ela manda');
+
+  // registro antigo, sem "ancora", com total zerado e parcela preenchida: não apaga a parcela
+  const antigo = C.normCompra({ parcelas: 1, totalCents: 0, parcelaCents: 5000 }, HOJE);
+  assert.equal(antigo.ancora, 'total');
+  assert.deepEqual(C.aplicarEdicao(antigo, 'parcelas', 4), { parcelas: 4, totalCents: 20000 });
+
+  // limites e erro
+  const grande = C.normCompra({ parcelas: 1, parcelaCents: 99999999999, totalCents: 1, ancora: 'parcela' }, HOJE);
+  assert.equal(C.aplicarEdicao(grande, 'parcelas', 60).totalCents, 99999999999, 'o total nunca passa do limite');
+  assert.throws(() => C.aplicarEdicao(nova(), 'desconhecido', 1), /Campo desconhecido/);
+  assert.equal(C.normCompra({ ancora: 'qualquer' }, HOJE).ancora, 'total');
+});

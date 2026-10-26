@@ -3,7 +3,7 @@
 (function () {
   const C = (window.Contas = window.Contas || {});
   const LADO_MAX_FOTO = 2200;
-  const PAGINAS_PDF = 2;
+  const PAGINAS_PDF = 3;
   const PDFJS = '/vendor/pdfjs/'; // o leitor de PDF (pdf.js) vem junto com o programa
 
   const ehPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
@@ -51,10 +51,12 @@
     return carregandoPdfjs;
   }
 
+  // Devolve as imagens das primeiras páginas e quantas páginas o PDF tem (para avisar se alguma ficou de fora).
   async function pdfParaImagens(arquivo, maxPaginas) {
+    let tarefa = null;
     try {
       const lib = await carregarPdfjs();
-      const tarefa = lib.getDocument({
+      tarefa = lib.getDocument({
         data: new Uint8Array(await arquivo.arrayBuffer()),
         isEvalSupported: false, // não executa código embutido no PDF
         cMapUrl: PDFJS + 'cmaps/', cMapPacked: true,
@@ -62,18 +64,18 @@
         wasmUrl: PDFJS + 'wasm/'
       });
       const pdf = await tarefa.promise;
-      const saida = [];
+      const imagens = [];
       for (let i = 1; i <= Math.min(pdf.numPages, PAGINAS_PDF, maxPaginas); i++) {
         const pagina = await pdf.getPage(i);
         const v0 = pagina.getViewport({ scale: 1 });
         const vp = pagina.getViewport({ scale: Math.min(4, 2000 / Math.max(v0.width, v0.height)) });
         const { c, g } = canvasBranco(vp.width, vp.height);
         await pagina.render({ canvas: c, canvasContext: g, viewport: vp }).promise;
-        saida.push(await paraBlobJpeg(c));
+        imagens.push(await paraBlobJpeg(c));
       }
-      await tarefa.destroy();
-      return saida;
+      return { imagens, totalPaginas: pdf.numPages };
     } catch (e) { console.error('Falha ao abrir o PDF:', e); throw { code: 'pdf' }; }
+    finally { if (tarefa) await tarefa.destroy().catch(() => {}); }
   }
 
   C.preparo = { ehPdf, paraJpeg, pdfParaImagens };

@@ -76,8 +76,13 @@ function interpretar(d, chaveHoje) {
 
   const ds = typeof d.data_compra === 'string' ? d.data_compra : '';
   const dataOk = M.dataValida(ds);
-  const k0 = Math.min((dataOk ? M.ymKey(ds.slice(0, 7)) : chaveHoje) + 1, M.ymKey(M.ANO_MAX + '-12'));
-  if (n > 1) obs.push('A 1ª parcela foi colocada no mês seguinte à compra.');
+  // Pix, débito e dinheiro saem no ato (mês da compra). Crédito (e boleto ou forma desconhecida) cai na fatura do mês seguinte.
+  const noAto = ['debito', 'pix', 'dinheiro'].includes(forma);
+  const mesBase = dataOk ? M.ymKey(ds.slice(0, 7)) : chaveHoje;
+  const k0 = Math.min(mesBase + (noAto ? 0 : 1), M.ymKey(M.ANO_MAX + '-12'));
+  if (noAto) obs.push('Pagamento no ato (' + forma + '): coloquei no mês da compra.');
+  else if (n > 1) obs.push('A 1ª parcela foi colocada no mês seguinte à compra.');
+  else obs.push('Coloquei o pagamento no mês seguinte à compra; ajuste se vence em outro mês.');
   if (d.confianca === 'baixa') obs.push('A leitura teve baixa confiança.');
   const extra = limpar(d.observacao, 240);
   if (extra) obs.unshift(extra);

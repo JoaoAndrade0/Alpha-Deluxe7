@@ -8,16 +8,19 @@ usam os mesmos dados ao mesmo tempo.
 - **Enviar nota**: você escolhe a foto (ou o PDF) da nota e o programa lê o valor e as parcelas e já cria a compra.
   A compra nasce marcada como "Lido da nota. Confira antes de pagar", com a miniatura da nota.
 
+Relatório completo do projeto (estrutura, design, segurança e testes): [docs/RELATORIO.md](docs/RELATORIO.md).
+
 ## Instalar
 
-1. No GitHub do projeto, abra **Actions > Contas a Pagar - gerar instaladores** e baixe o instalador
-   (ou, se existir, baixe em **Releases**).
+1. No GitHub do projeto, abra **Actions > Contas a Pagar - testes e instaladores**, entre na execução mais recente
+   (com ✓ verde) e baixe o arquivo em **Artifacts**: `instalador-windows` ou `instalador-mac`.
+   Quando existir uma publicação em **Releases**, baixe de lá (inclui o `SHA256SUMS.txt` para conferir o download).
 2. **Windows**: abra `ContasAPagar-Instalador-….exe`. Como o instalador não tem assinatura paga, o Windows pode mostrar
    "O Windows protegeu o computador": clique em **Mais informações** e depois em **Executar assim mesmo**.
-3. **Mac**: abra o `.dmg` e arraste o programa para Aplicativos. Se o Mac bloquear, clique com o botão direito no
-   programa e escolha **Abrir**. (A versão do Mac ainda não foi testada em um Mac de verdade.)
+3. **Mac**: abra o `.dmg` (arm64 para Macs com chip Apple, x64 para os Intel) e arraste o programa para Aplicativos.
+   Se o Mac bloquear, clique com o botão direito no programa e escolha **Abrir**.
 
-Para atualizar, instale a versão nova por cima. Os dados não se perdem.
+Para atualizar, instale a versão nova por cima. Os dados não se perdem: ficam na pasta compartilhada, não no programa.
 
 ## Primeira vez em cada computador
 
@@ -34,6 +37,16 @@ O programa abre pedindo duas coisas, em **Configurações**:
 
 O modelo padrão é o **Claude Opus 5.5**, o mais preciso. Em Configurações dá para trocar por um mais barato.
 A leitura é cobrada na conta da Anthropic, em geral poucos centavos de dólar por nota.
+Por segurança, o programa não faz mais de 30 leituras em 10 minutos.
+
+## Como as contas são calculadas
+
+- O valor que você **digitou por último** (total ou parcela) é o que manda. Se digitou a parcela do cartão
+  (155,09) e depois mudou para 3 parcelas, o total vira 465,27 e a parcela continua 155,09. Se digitou o total
+  (465,28), a parcela é o total dividido pelas parcelas; a diferença de centavos aparece como aviso.
+- Parcelas de compra no crédito entram a partir do **mês seguinte** à compra. Pix, débito e dinheiro entram no
+  mês da compra. Dá para ajustar em "1ª parcela em".
+- Meses anteriores ao atual, com parcela em aberto, aparecem como "Atrasado".
 
 ## Dados e segurança
 
@@ -42,17 +55,50 @@ A leitura é cobrada na conta da Anthropic, em geral poucos centavos de dólar p
   editarem **a mesma compra no mesmo instante**, vale a última gravação.
 - O histórico de versões do OneDrive, do Google Drive ou do Dropbox serve de **backup**.
 - Ao enviar uma nota, a imagem é enviada para a API do Claude (Anthropic) para ser lida. Nada mais sai do computador.
+  O programa não baixa nada ao abrir (fontes e leitor de PDF vêm dentro dele) e não faz conexões em segundo plano.
+- Quem tem acesso à pasta compartilhada pode ler e alterar tudo. Dê acesso só a quem deve ter.
+- Detalhes, ameaças consideradas e riscos que restam: [docs/RELATORIO.md](docs/RELATORIO.md#segurança).
 
 ## Para quem for mexer no código
 
 ```
 npm ci
-npm start            # abre o programa
-npm test             # testes do núcleo (pasta de dados, configurações, leitura de notas)
+npm start                 # abre o programa
+npm test                  # 80 testes de unidade
+npm run test:cobertura    # os mesmos, com a cobertura de linhas e ramos
+npm run test:e2e          # com o programa aberto de verdade (Linux: precisa de xvfb); roda 4 baterias
+npm run audit             # dependências sem falhas conhecidas de gravidade alta
 npx electron-builder --publish never   # gera o instalador do sistema em que estiver rodando
 ```
 
-- `lib/store.js`: dados em arquivos. `lib/claude.js`: leitura de notas com o SDK oficial. `lib/config.js`: configurações.
-- `main.js` / `preload.js`: janela e ponte segura. `renderer/`: a tela. `renderer/shim.js` liga a tela à pasta e à API.
-- Teste completo com o programa aberto de verdade (precisa de tela virtual no Linux e do pacote `playwright`):
-  `xvfb-run -a node test/e2e/todos.js`. Para testar o programa já empacotado, defina `APP_EXE`.
+```
+main.js, preload.js        janela, protocolo seguro app://, canais de comunicação (IPC)
+lib/                       processo principal: store (dados em arquivos), config, claude (SDK oficial),
+                           nota (pedido e conferência da leitura), validar (argumentos do IPC), limites
+renderer/                  a tela (HTML, CSS e scripts sem bundler)
+  lib/                     regras puras, usadas pela tela e pelo processo principal: dinheiro, meses, calculo, mensagens
+  ponte.js                 única porta da tela para dados, leitura de notas e arquivos
+  preparo.js               foto -> JPEG; PDF -> imagens (pdf.js embutido)
+  envio.js, app.js         envio de nota e tela principal; configuracoes.js
+test/*.test.js             testes de unidade
+test/e2e/                  funcional, segurança, robustez e acessibilidade com o programa aberto
+test/smoke/                teste de fumaça do programa já empacotado (roda no Windows e no Mac, no GitHub)
+```
+
+- A tela não tem acesso a Node, ao disco nem à internet. O pedido ao Claude e a conferência da resposta ficam no
+  processo principal; a tela só envia imagens.
+- Regras de segurança do pacote ("fuses" do Electron): não roda como Node, ignora `NODE_OPTIONS` e depuração,
+  só carrega o `app.asar` e confere a integridade dele.
+- Variáveis `ANTHROPIC_BASE_URL` (aponta a API para outro endereço) e `CONTAS_USER_DATA` (outra pasta de configuração)
+  existem para os testes e também valem no programa instalado; só afetam quem já controla o computador.
+- Para publicar em Releases: crie uma tag `contas-v1.0.0`. O GitHub Actions testa, gera os instaladores e publica
+  com o `SHA256SUMS.txt`.
+
+## Limitações conhecidas
+
+- Instaladores sem assinatura paga (avisos do Windows e do Mac). A versão do Mac foi testada só pelo GitHub
+  (abre, lê a pasta e fecha); ninguém usou num Mac de verdade ainda.
+- PDFs com imagens em formato JPEG 2000 não foram testados.
+- Notas fotografadas muito de longe ou cupons térmicos longos podem sair ilegíveis para o Claude. A compra nasce
+  sempre marcada para conferir.
+- Não há atualização automática.

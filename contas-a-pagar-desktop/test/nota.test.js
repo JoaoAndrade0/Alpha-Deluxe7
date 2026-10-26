@@ -22,11 +22,26 @@ test('valores escritos em texto no formato brasileiro também funcionam', () => 
   assert.equal(i.totalCents, 123456); assert.equal(i.parcelaCents, 41152);
 });
 
-test('pix ou débito sem parcelas: à vista, sem aviso', () => {
-  const i = N.interpretar({ eh_comprovante: true, valor_total: 90, parcelas: null, forma_pagamento: 'pix' }, HOJE);
-  assert.equal(i.parcelas, 1); assert.equal(i.totalCents, 9000); assert.equal(i.parcelaCents, 9000);
-  assert.deepEqual(i.obs, []);
-  assert.equal(i.inicio, '2026-11', 'sem data na nota, usa o mês de hoje + 1');
+test('pix, débito e dinheiro saem no ato: entram no mês da compra e o aviso diz isso', () => {
+  for (const forma of ['pix', 'debito', 'dinheiro']) {
+    const i = N.interpretar({ eh_comprovante: true, valor_total: 90, parcelas: null, forma_pagamento: forma, data_compra: '2026-10-20' }, HOJE);
+    assert.equal(i.parcelas, 1); assert.equal(i.totalCents, 9000); assert.equal(i.parcelaCents, 9000);
+    assert.equal(i.inicio, '2026-10', forma + ': mês da própria compra');
+    assert.deepEqual(i.obs, ['Pagamento no ato (' + forma + '): coloquei no mês da compra.']);
+  }
+  const semData = N.interpretar({ eh_comprovante: true, valor_total: 90, forma_pagamento: 'pix' }, HOJE);
+  assert.equal(semData.inicio, '2026-10', 'sem data na nota, usa o mês de hoje');
+});
+
+test('crédito à vista e boleto caem no mês seguinte, e o aviso explica', () => {
+  const credito = N.interpretar({ eh_comprovante: true, valor_total: 200, parcelas: 1, forma_pagamento: 'credito', data_compra: '2026-10-20' }, HOJE);
+  assert.equal(credito.inicio, '2026-11');
+  assert.deepEqual(credito.obs, ['Coloquei o pagamento no mês seguinte à compra; ajuste se vence em outro mês.']);
+  const boleto = N.interpretar({ eh_comprovante: true, valor_total: 200, parcelas: 1, forma_pagamento: 'boleto', data_compra: '2026-10-20' }, HOJE);
+  assert.equal(boleto.inicio, '2026-11');
+  assert.match(boleto.obs[0], /mês seguinte/);
+  const virada = N.interpretar({ eh_comprovante: true, valor_total: 200, parcelas: 2, forma_pagamento: 'credito', data_compra: '2026-12-28' }, HOJE);
+  assert.equal(virada.inicio, '2027-01', 'compra no fim do ano cai em janeiro');
 });
 
 test('crédito sem número de parcelas: considera à vista e avisa', () => {

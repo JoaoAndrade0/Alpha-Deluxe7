@@ -13,8 +13,8 @@ function fail(code, message) {
   return e;
 }
 
-function makeClient(apiKey) {
-  return new Anthropic({ apiKey, maxRetries: 2, timeout: 180000 });
+function makeClient(apiKey, opcoes = {}) {
+  return new Anthropic({ apiKey, maxRetries: 2, timeout: 180000, ...opcoes });
 }
 
 // Aceita o JSON puro, dentro de um bloco ``` ou cercado por uma frase.
@@ -74,7 +74,8 @@ async function lerNota({ apiKey, model, prompt, images, signal, client }) {
 // Chamada mínima só para saber se a chave funciona.
 async function testarChave({ apiKey, model, client }) {
   if (!client && !apiKey) throw fail('sem_chave', 'Falta a chave da API.');
-  const c = client || makeClient(apiKey);
+  // O teste é só para saber se a chave abre a porta: resposta rápida, sem tentativas repetidas.
+  const c = client || makeClient(apiKey, { maxRetries: 0, timeout: 30000 });
   try {
     await c.messages.create({ model, max_tokens: 64, messages: [{ role: 'user', content: 'Responda apenas: ok' }] });
     return true;

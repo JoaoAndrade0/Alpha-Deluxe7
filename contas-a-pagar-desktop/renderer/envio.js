@@ -11,20 +11,24 @@
 
   const ehImagem = f => /^image\//.test(f.type);
 
-  async function criarCompra(alvo, info, notaId, notaTipo) {
-    let servicoId = alvo;
-    if (servicoId === '__new__' || !ctx.servicos.has(servicoId)) {
-      const ref = ctx.db.collection('servicos').doc();
-      await ref.set({ nome: info.fornecedor || 'Novo serviço', ordem: Date.now() });
-      servicoId = ref.id; ctx.forcarAlvo(servicoId);
+  // Cria o serviço (se for novo) e a compra. Os identificadores ficam guardados no item: se algo falhar no meio e a
+  // pessoa tentar de novo, o mesmo serviço e a mesma compra são regravados em vez de criar duplicatas.
+  async function criarCompra(it, notaTipo) {
+    if (!it.servicoId) {
+      if (it.alvo === '__new__' || !ctx.servicos.has(it.alvo)) {
+        it.servicoNovoId = it.servicoNovoId || ctx.db.collection('servicos').doc().id;
+        await ctx.db.doc('servicos/' + it.servicoNovoId).set({ nome: it.info.fornecedor || 'Novo serviço', ordem: it.ordemServico = it.ordemServico || Date.now() });
+        it.servicoId = it.servicoNovoId; ctx.forcarAlvo(it.servicoId);
+      } else it.servicoId = it.alvo;
     }
-    const ref = ctx.db.collection('compras').doc();
-    await ref.set({
-      servicoId, descricao: info.descricao, totalCents: info.totalCents, parcelas: info.parcelas, parcelaCents: info.parcelaCents,
-      inicio: info.inicio, pagas: {}, ordem: Date.now(), conferir: true, leitura: info.obs.join(' '),
-      notaId, notaTipo, dataCompra: info.dataCompra
+    it.compraId = it.compraId || ctx.db.collection('compras').doc().id;
+    const i = it.info;
+    await ctx.db.doc('compras/' + it.compraId).set({
+      servicoId: it.servicoId, descricao: i.descricao, totalCents: i.totalCents, parcelas: i.parcelas, parcelaCents: i.parcelaCents,
+      inicio: i.inicio, pagas: {}, ordem: it.ordemCompra = it.ordemCompra || Date.now(), conferir: true, leitura: i.obs.join(' '),
+      notaId: it.notaId, notaTipo, dataCompra: i.dataCompra, ancora: 'total'
     });
-    return ref.id;
+    return it.compraId;
   }
 
   function mostrarCompra(id) {
@@ -75,21 +79,32 @@
     rodando = false;
   }
 
+  // Passo a passo, guardando o que já foi feito em "it": "Tentar de novo" continua de onde parou e não paga outra leitura.
   async function processar(it) {
     const sinal = it.ctl.signal, cancelar = [['Cancelar', () => it.ctl.abort()]];
     try {
       if (sinal.aborted) throw { code: 'cancelled' };
-      definirEstado(it, 'Preparando o arquivo…', 'busy', cancelar);
       const pdf = C.preparo.ehPdf(it.arquivo);
-      const paginas = (pdf ? await C.preparo.pdfParaImagens(it.arquivo, MAX_IMAGENS) : [await C.preparo.paraJpeg(it.arquivo)]).slice(0, MAX_IMAGENS);
-      if (sinal.aborted) throw { code: 'cancelled' };
-      definirEstado(it, 'Lendo a nota…', 'busy', cancelar);
-      const info = await C.ponte.lerNota(paginas, sinal);
+      if (!it.info) {
+        definirEstado(it, 'Preparando o arquivo…', 'busy', cancelar);
+        const prep = pdf ? await C.preparo.pdfParaImagens(it.arquivo, MAX_IMAGENS) : { imagens: [await C.preparo.paraJpeg(it.arquivo)], totalPaginas: 1 };
+        it.paginas = prep.imagens.slice(0, MAX_IMAGENS);
+        if (sinal.aborted) throw { code: 'cancelled' };
+        definirEstado(it, 'Lendo a nota…', 'busy', cancelar);
+        it.info = await C.ponte.lerNota(it.paginas, sinal);
+        if (prep.totalPaginas > it.paginas.length) {
+          it.info.obs.push('O PDF tem ' + prep.totalPaginas + ' páginas e li só as ' + it.paginas.length + ' primeiras. Confira o total.');
+        }
+      }
       definirEstado(it, 'Criando a compra…', 'busy');
-      let notaId = '';
-      try { notaId = await C.ponte.guardarArquivo(pdf ? it.arquivo : paginas[0], pdf ? 'application/pdf' : 'image/jpeg'); }
-      catch (e) { info.obs.push('O arquivo da nota não foi guardado.'); }
-      const id = await criarCompra(it.alvo, info, notaId, pdf ? 'pdf' : 'imagem');
+      if (it.notaId === undefined) {
+        try { it.notaId = await C.ponte.guardarArquivo(pdf ? it.arquivo : it.paginas[0], pdf ? 'application/pdf' : 'image/jpeg'); }
+        catch (e) { it.notaId = ''; it.info.obs.push('O arquivo da nota não foi guardado.'); }
+      }
+      let id;
+      try { id = await criarCompra(it, pdf ? 'pdf' : 'imagem'); }
+      catch (e) { throw { code: 'sem_gravar', message: String((e && e.message) || e) }; }
+      const info = it.info;
       const texto = info.totalCents
         ? 'Compra criada: ' + C.fmt(info.totalCents) + (info.parcelas > 1 ? ' em ' + info.parcelas + '× de ' + C.fmt(info.parcelaCents) : ' à vista') + (info.fornecedor ? ' · ' + info.fornecedor : '')
         : 'Compra criada, mas não encontrei o valor. Preencha o total e as parcelas.';

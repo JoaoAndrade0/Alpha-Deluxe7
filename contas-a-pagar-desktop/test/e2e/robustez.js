@@ -144,8 +144,76 @@ const espera = ms => new Promise(r => setTimeout(r, ms));
   await d2.app.close();
   passo('serviço, compra, valor, parcelas e parcela paga criados só pelo teclado continuam lá depois de fechar e abrir o programa');
 
-  assert.deepEqual(amb.erros.concat(amb2.erros, ruim.erros, dur.erros), [], 'sem erros no console');
-  ruim.fechar(); dur.fechar();
+  /* ---------- digitar a parcela primeiro: o que foi digitado nunca é apagado por um cálculo ---------- */
+  const calc = await criarAmbiente({ semear: false });
+  const c1p = await calc.lancar();
+  await c1p.janela.waitForSelector('#empty:not([hidden])', { timeout: 20000 });
+  await c1p.janela.click('.sec-head [data-act=add-servico]');
+  await c1p.janela.waitForFunction(() => document.activeElement && document.activeElement.classList.contains('svc-name'));
+  await c1p.janela.keyboard.press('Enter');
+  await c1p.janela.click('.svc [data-act=add-compra]');
+  await c1p.janela.waitForFunction(() => document.activeElement && document.activeElement.dataset.f === 'total');
+  await c1p.janela.fill('.compra [data-f=parcela]', '155,09'); await c1p.janela.press('.compra [data-f=parcela]', 'Enter');
+  await c1p.janela.waitForFunction(() => document.querySelector('.compra [data-f=total]').value === '155,09');
+  await c1p.janela.fill('.compra [data-f=parcelas]', '3'); await c1p.janela.press('.compra [data-f=parcelas]', 'Enter');
+  await c1p.janela.waitForFunction(() => document.querySelector('.compra [data-f=total]').value === '465,27');
+  assert.equal(await c1p.janela.inputValue('.compra [data-f=parcela]'), '155,09', 'a parcela digitada continua 155,09');
+  assert.equal(await c1p.janela.locator('.compra .box').count(), 3);
+  await c1p.janela.fill('.compra [data-f=total]', '465,28'); await c1p.janela.press('.compra [data-f=total]', 'Enter');
+  await c1p.janela.waitForFunction(() => /as parcelas somam/.test(document.querySelector('.compra .c-note').textContent));
+  assert.equal(await c1p.janela.inputValue('.compra [data-f=parcela]'), '155,09', 'refazer o total recalcula a parcela: 465,28 ÷ 3');
+  assert.match(semNbsp(await c1p.janela.textContent('.compra .c-note')), /as parcelas somam R\$ 465,27 \(total informado R\$ 465,28\)/, 'a diferença de 1 centavo é avisada');
+  await c1p.app.close();
+  passo('digitar a parcela primeiro e depois o número de parcelas: o total acompanha, a parcela digitada fica, e a diferença de centavos é avisada');
+
+  /* ---------- trocar de pasta: se a nova não abre, a antiga continua valendo ---------- */
+  const troca = await criarAmbiente();
+  const tr = await troca.lancar();
+  await tr.janela.waitForSelector('.compra', { timeout: 20000 });
+  const arquivoRuim = path.join(troca.compartilhada, 'nao-e-pasta.txt'); fs.writeFileSync(arquivoRuim, 'x');
+  const pastaBoa = path.join(require('os').tmpdir(), 'e2e-nova-' + Date.now()); fs.mkdirSync(pastaBoa);
+  await tr.app.evaluate(({ dialog }, caminho) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [caminho] }); }, arquivoRuim);
+  await tr.janela.click('#cfg-btn');
+  await tr.janela.click('#cfg-pick');
+  await tr.janela.waitForFunction(() => /Não foi possível abrir a pasta/.test(document.querySelector('#cfg-dir').textContent));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(troca.dadosDoPrograma, 'config.json'), 'utf8')).dataDir, troca.compartilhada, 'a pasta que funcionava continua guardada');
+  assert.equal(await tr.janela.$eval('#cfg-close', b => b.disabled), false, 'a antiga ainda funciona, então dá para fechar');
+  await tr.janela.click('#cfg-close');
+  assert.equal(semNbsp(await tr.janela.textContent('#s-total')), 'R$ 1.311,31', 'os dados continuam na tela');
+  await tr.app.evaluate(({ dialog }, caminho) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [caminho] }); }, pastaBoa);
+  await tr.janela.click('#cfg-btn');
+  await tr.janela.click('#cfg-pick');
+  await tr.janela.waitForSelector('#empty:not([hidden])', { timeout: 20000 });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(troca.dadosDoPrograma, 'config.json'), 'utf8')).dataDir, pastaBoa);
+  assert.ok(fs.existsSync(path.join(pastaBoa, 'ContasAPagar', 'compras')), 'a nova pasta foi preparada');
+  await tr.app.close();
+  passo('trocar para uma pasta que não abre mantém a antiga; trocar para uma boa recarrega a tela já com a nova');
+
+  /* ---------- "tentar de novo" depois de falhar ao salvar: sem duplicar serviço, nota nem leitura paga ---------- */
+  const rt = await criarAmbiente({ semear: false });
+  const rr = await rt.lancar();
+  await rr.janela.waitForSelector('#empty:not([hidden])', { timeout: 20000 });
+  rt.api.estado.resposta = { eh_comprovante: true, fornecedor: 'Loja Nova', descricao: 'tinta', valor_total: 300, parcelas: 2, forma_pagamento: 'credito', data_compra: '2026-10-20' };
+  const comprasDir = path.join(rt.raiz, 'compras');
+  fs.renameSync(comprasDir, comprasDir + '.fora'); fs.writeFileSync(comprasDir, 'bloqueado'); // a gravação das compras vai falhar
+  await rr.janela.setInputFiles('#pick', path.join(process.env.FIXTURES || __dirname, 'nota.png'));
+  await rr.janela.waitForSelector('.up-item.err', { timeout: 20000 });
+  assert.match(await rr.janela.textContent('.up-item.err .up-state'), /não consegui salvar a compra/);
+  fs.unlinkSync(comprasDir); fs.renameSync(comprasDir + '.fora', comprasDir); // a pasta volta
+  await rr.janela.click('.up-item.err >> text=Tentar de novo');
+  await rr.janela.waitForSelector('.up-item.done', { timeout: 20000 });
+  const leituras = rt.api.pedidos.filter(p => p.body.messages && JSON.stringify(p.body.messages).includes('valor_total')).length;
+  assert.equal(leituras, 1, 'a nota foi lida (e cobrada) uma vez só: ' + leituras);
+  assert.equal(fs.readdirSync(path.join(rt.raiz, 'servicos')).filter(f => f.endsWith('.json')).length, 1, 'um serviço só, sem duplicata');
+  assert.equal(fs.readdirSync(comprasDir).filter(f => f.endsWith('.json')).length, 1, 'uma compra só');
+  assert.equal(fs.readdirSync(path.join(rt.raiz, 'notas')).length, 1, 'o arquivo da nota foi guardado uma vez só');
+  await rr.app.close();
+  passo('falhou ao salvar e a pessoa tentou de novo: a nota não foi lida outra vez, e não sobrou serviço, compra nem arquivo duplicado');
+
+  const esperados = /Content Security Policy|Failed to load resource|ENOTDIR|unavailable|Não foi possível/;
+  const todos = amb.erros.concat(amb2.erros, ruim.erros, dur.erros, calc.erros, troca.erros, rt.erros);
+  assert.deepEqual(todos.filter(e => !esperados.test(e)), [], 'sem erros inesperados no console');
+  ruim.fechar(); dur.fechar(); calc.fechar(); troca.fechar(); rt.fechar();
   amb.fechar(); amb2.fechar();
   console.log('\nROBUSTEZ OK.');
 })().catch(e => { console.error('FALHOU:', e); process.exit(1); });

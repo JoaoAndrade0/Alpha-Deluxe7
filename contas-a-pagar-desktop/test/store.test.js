@@ -99,3 +99,32 @@ test('notas: salva, localiza por id e recusa tipo ou id inválido', async () => 
   assert.equal(s.notaPath('0'.repeat(32)), null);
   await assert.rejects(s.saveNota(Buffer.from('x'), 'exe'), { code: 'unsupported_type' });
 });
+
+test('leitura em paralelo mantém a ordem e só relê o que mudou (cache)', async () => {
+  const root = tmp(); const s = new Store(root); await s.init();
+  for (let i = 0; i < 200; i++) await s.set('compras', 'c' + String(i).padStart(3, '0'), { n: i });
+  const lidas = [];
+  const original = fs.promises.readFile;
+  fs.promises.readFile = async (...a) => { lidas.push(String(a[0])); return original.apply(fs.promises, a); };
+  try {
+    const primeira = await s.list('compras');
+    assert.equal(primeira.length, 200);
+    assert.deepEqual(primeira.map(d => d.data.n), [...Array(200).keys()], 'ordem por identificador');
+    const leituras1 = lidas.length;
+    await s.list('compras');
+    assert.equal(lidas.length, leituras1, 'sem mudanças, nenhum arquivo é lido de novo');
+    // alteração feita por fora (outro computador): muda tamanho e horário, então é relida
+    fs.writeFileSync(path.join(root, 'compras', 'c007.json'), JSON.stringify({ n: 7000, extra: 'texto a mais' }));
+    const depois = await s.list('compras');
+    assert.equal(depois.find(d => d.id === 'c007').data.n, 7000);
+    assert.equal(lidas.length, leituras1 + 1, 'só o arquivo alterado foi relido');
+    // alteração própria nunca fica presa no cache
+    await s.update('compras', 'c008', { n: 8000 });
+    assert.equal((await s.list('compras')).find(d => d.id === 'c008').data.n, 8000);
+    await s.delete('compras', 'c009');
+    assert.equal((await s.list('compras')).some(d => d.id === 'c009'), false);
+    fs.unlinkSync(path.join(root, 'compras', 'c010.json'));
+    assert.equal((await s.list('compras')).some(d => d.id === 'c010'), false, 'apagado por fora também some');
+    assert.ok(![...s.cache.keys()].some(f => f.endsWith('c010.json')), 'o cache esquece o arquivo apagado');
+  } finally { fs.promises.readFile = original; }
+});

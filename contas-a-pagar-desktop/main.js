@@ -60,15 +60,21 @@ const limitador = criarLimitador({ simultaneas: 2, max: 30, janelaMs: 10 * 60 * 
 const subs = new Map(); // `${webContentsId}:${assinatura}` -> função que para de observar
 const emAndamento = new Map(); // pedido -> AbortController
 
-async function openStore() {
-  if (!config.dataDir) { store = null; return; }
+// Abre (e prepara) a pasta de dados. Só devolve se der certo.
+async function abrirPasta(dir) {
   try {
-    const s = new Store(Store.resolveRoot(config.dataDir));
+    const s = new Store(Store.resolveRoot(dir));
     await s.init();
-    store = s;
+    return s;
   } catch (e) {
-    store = null; // pasta apagada, sem permissão ou desconectada: a tela pede para escolher de novo
+    throw Object.assign(new Error('Não consegui abrir essa pasta. Escolha uma pasta onde você pode criar arquivos.'), { code: 'sem_pasta' });
   }
+}
+
+async function openStore() {
+  store = null;
+  if (!config.dataDir) return;
+  try { store = await abrirPasta(config.dataDir); } catch (e) { /* pasta apagada, sem permissão ou desconectada: a tela pede para escolher de novo */ }
 }
 
 function requireStore() {
@@ -107,15 +113,17 @@ function registerIpc() {
   handle('config:chooseDir', async () => {
     const r = await dialog.showOpenDialog(win, { title: 'Escolha a pasta compartilhada', properties: ['openDirectory', 'createDirectory'] });
     if (r.canceled || !r.filePaths[0]) return null;
+    const novo = await abrirPasta(r.filePaths[0]); // se não abrir, a pasta que já funcionava continua valendo
     config.setDataDir(r.filePaths[0]);
-    await openStore();
+    store = novo;
     return viewOf();
   });
   handle('config:setKey', (e, key) => { config.setKey(key); return viewOf(); });
   handle('config:clearKey', () => { config.clearKey(); return viewOf(); });
   handle('config:setModel', (e, id) => { config.setModel(id); return viewOf(); });
   handle('config:testKey', async () => {
-    await claude.testarChave({ apiKey: config.getKey(), model: config.model });
+    const liberar = limitador.iniciar(); // o teste também gasta uma chamada paga: entra na mesma conta
+    try { await claude.testarChave({ apiKey: config.getKey(), model: config.model }); } finally { liberar(); }
     return true;
   });
   handle('shell:open', (e, url) => { openExternal(url); return true; });
@@ -132,10 +140,14 @@ function registerIpc() {
     const wc = e.sender;
     const key = wc.id + ':' + subId;
     if (subs.has(key)) return true;
+    let ultima = 0;
     const push = async () => {
       if (wc.isDestroyed()) return;
-      try { wc.send('db:snapshot', subId, await st.list(coll)); }
-      catch (err) { if (!wc.isDestroyed()) wc.send('db:error', subId, { code: 'unavailable', message: String(err.message) }); }
+      const minha = ++ultima; // se duas leituras se cruzarem, só a mais nova é enviada (a antiga nunca sobrescreve a nova)
+      try {
+        const docs = await st.list(coll);
+        if (minha === ultima && !wc.isDestroyed()) wc.send('db:snapshot', subId, docs);
+      } catch (err) { if (!wc.isDestroyed()) wc.send('db:error', subId, { code: 'unavailable', message: String(err.message) }); }
     };
     subs.set(key, st.watch(coll, push));
     await push();

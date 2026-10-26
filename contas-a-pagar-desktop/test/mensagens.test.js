@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { mensagemDeNota, mensagemDeChave, PEDE_CONFIGURACAO } = require('../renderer/lib/mensagens');
 
 test('todo erro que o envio de nota pode gerar tem texto próprio, em português e sem jargão', () => {
-  const codigos = ['sem_chave', 'chave_invalida', 'sem_saldo', 'sem_internet', 'sem_pasta', 'rate_limited', 'image_rejected', 'img', 'too_large', 'pdf', 'nao_nota', 'invalid_json', 'refused', 'empty_completion'];
+  const codigos = ['sem_chave', 'chave_invalida', 'sem_saldo', 'sem_internet', 'sem_pasta', 'rate_limited', 'image_rejected', 'img', 'too_large', 'sem_gravar', 'pdf', 'nao_nota', 'invalid_json', 'refused', 'empty_completion'];
   const vistos = new Set();
   for (const code of codigos) {
     const t = mensagemDeNota({ code });

@@ -15,6 +15,17 @@ const DOC_RE = /^([A-Za-z0-9_-]{1,64})\.json$/;
 const NOTA_EXT = ['jpg', 'png', 'webp', 'gif', 'pdf'];
 const MAX_DOC_BYTES = 256 * 1024;
 const POLL_MS = 15000;
+const LOTE = 16; // arquivos lidos ao mesmo tempo (pastas sincronizadas na nuvem podem ser lentas)
+
+// Roda fn em todos os itens, no máximo LOTE por vez, mantendo a ordem do resultado.
+async function emLotes(itens, fn) {
+  const saida = new Array(itens.length);
+  let proximo = 0;
+  await Promise.all(Array.from({ length: Math.min(LOTE, itens.length) }, async () => {
+    while (proximo < itens.length) { const i = proximo++; saida[i] = await fn(itens[i], i); }
+  }));
+  return saida;
+}
 
 function fail(code, message) {
   const e = new Error(message);
@@ -38,6 +49,7 @@ class Store extends EventEmitter {
     super();
     this.root = root;
     this.queues = new Map();
+    this.cache = new Map(); // arquivo -> { mtimeMs, size, data }: só relê o que mudou
   }
 
   // Se a pessoa escolheu a própria pasta de dados (ou uma pasta que já tem os dados), usa como está.
@@ -66,15 +78,22 @@ class Store extends EventEmitter {
     const dir = this.dir(coll);
     let names;
     try { names = await fsp.readdir(dir); } catch (e) { if (e.code === 'ENOENT') return []; throw e; }
-    const docs = [];
-    for (const n of names) {
-      const m = DOC_RE.exec(n);
-      if (!m) continue; // ignora temporários e cópias de conflito do serviço de sincronização
+    const arquivos = names.map(n => ({ n, m: DOC_RE.exec(n) })).filter(x => x.m); // ignora temporários e cópias de conflito
+    const lidos = await emLotes(arquivos, async ({ n, m }) => {
+      const f = path.join(dir, n);
       try {
-        const data = JSON.parse(await fsp.readFile(path.join(dir, n), 'utf8'));
-        if (isPlain(data)) docs.push({ id: m[1], data });
-      } catch (e) { /* arquivo ainda sincronizando ou ilegível: aparece no próximo ciclo */ }
-    }
+        const st = await fsp.stat(f);
+        const guardado = this.cache.get(f);
+        if (guardado && guardado.mtimeMs === st.mtimeMs && guardado.size === st.size) return { id: m[1], data: guardado.data };
+        const data = JSON.parse(await fsp.readFile(f, 'utf8'));
+        if (!isPlain(data)) return null;
+        this.cache.set(f, { mtimeMs: st.mtimeMs, size: st.size, data });
+        return { id: m[1], data };
+      } catch (e) { return null; /* arquivo ainda sincronizando ou ilegível: aparece no próximo ciclo */ }
+    });
+    const vivos = new Set(arquivos.map(a => path.join(dir, a.n)));
+    for (const f of this.cache.keys()) if (path.dirname(f) === dir && !vivos.has(f)) this.cache.delete(f);
+    const docs = lidos.filter(Boolean);
     docs.sort((a, b) => (a.id < b.id ? -1 : 1));
     return docs;
   }
@@ -102,6 +121,7 @@ class Store extends EventEmitter {
   async _write(file, data) {
     const text = JSON.stringify(data);
     if (Buffer.byteLength(text) > MAX_DOC_BYTES) throw fail('invalid_argument', 'Registro grande demais.');
+    this.cache.delete(file);
     const tmp = path.join(path.dirname(file), '.' + path.basename(file) + '.' + crypto.randomBytes(4).toString('hex') + '.tmp');
     await fsp.writeFile(tmp, text, 'utf8');
     try { await fsp.rename(tmp, file); } catch (e) { await fsp.unlink(tmp).catch(() => {}); throw e; }
@@ -127,6 +147,7 @@ class Store extends EventEmitter {
 
   delete(coll, id) {
     return this._serial(coll + '/' + id, async () => {
+      this.cache.delete(this.file(coll, id));
       try { await fsp.unlink(this.file(coll, id)); } catch (e) { if (e.code !== 'ENOENT') throw e; }
       this.emit('change', coll);
     });
@@ -160,12 +181,11 @@ class Store extends EventEmitter {
   async _signature(dir) {
     let names;
     try { names = await fsp.readdir(dir); } catch (e) { return 'ausente'; }
-    const parts = [];
-    for (const n of names.sort()) {
-      if (!DOC_RE.test(n)) continue;
-      try { const st = await fsp.stat(path.join(dir, n)); parts.push(n + ':' + st.mtimeMs + ':' + st.size); } catch (e) { /* sumiu no meio */ }
-    }
-    return parts.join('|');
+    const docs = names.filter(n => DOC_RE.test(n)).sort();
+    const partes = await emLotes(docs, async n => {
+      try { const st = await fsp.stat(path.join(dir, n)); return n + ':' + st.mtimeMs + ':' + st.size; } catch (e) { return ''; /* sumiu no meio */ }
+    });
+    return partes.filter(Boolean).join('|');
   }
 
   // Arquivos das notas (foto ou PDF original), guardados na própria pasta compartilhada.
