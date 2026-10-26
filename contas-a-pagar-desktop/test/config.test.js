@@ -85,3 +85,13 @@ test('chave criptografada que não abre mais (outro usuário do sistema) vira "s
   const quebrado = new Config(f, { isEncryptionAvailable: () => true, decryptString: () => { throw new Error('não consigo decifrar'); } });
   assert.equal(quebrado.getKey(), ''); assert.equal(quebrado.publicView().hasKey, false);
 });
+
+test('configuração que já existia com permissão aberta é fechada ao abrir o programa', { skip: process.platform === 'win32' }, () => {
+  const f = tmp();
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, JSON.stringify({ dataDir: '/pasta', apiKeyPlain: 'sk-ant-api03-' + 'd'.repeat(40) }), { mode: 0o644 });
+  fs.chmodSync(f, 0o644);
+  assert.equal(fs.statSync(f).mode & 0o777, 0o644);
+  new Config(f, null);
+  assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+});

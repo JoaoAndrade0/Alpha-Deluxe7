@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
-    "test:e2e": "xvfb-run -a node test/e2e/run.js",
+    "test:e2e": "xvfb-run -a node test/e2e/todos.js",
+    "test:cobertura": "node --test --experimental-test-coverage \"test/*.test.js\"",
     "test:smoke": "node test/smoke/empacotado.js",
     "audit": "npm audit --omit=dev --audit-level=high",
     "dist": "electron-builder --publish never"

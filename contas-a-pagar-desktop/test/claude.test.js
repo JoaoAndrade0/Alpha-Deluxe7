@@ -70,3 +70,76 @@ test('testarChave: sucesso e chave inválida', async () => {
   const bad = fakeClient(() => { throw new Anthropic.AuthenticationError(401, {}, 'invalid x-api-key', h); });
   await assert.rejects(testarChave({ model: 'claude-opus-5-5', client: bad }), { code: 'chave_invalida' });
 });
+
+// ---- SDK de verdade, contra um servidor local: confere o que realmente sai pela rede ----
+const http = require('node:http');
+function servidorLocal(resposta) {
+  const pedidos = [];
+  const server = http.createServer((req, res) => {
+    let corpo = '';
+    req.on('data', c => { corpo += c; });
+    req.on('end', () => {
+      pedidos.push({ metodo: req.method, url: req.url, headers: req.headers, body: JSON.parse(corpo || '{}') });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(resposta));
+    });
+  });
+  return new Promise(r => server.listen(0, '127.0.0.1', () => r({ server, pedidos, base: 'http://127.0.0.1:' + server.address().port })));
+}
+const mensagem = texto => ({ id: 'msg_1', type: 'message', role: 'assistant', model: 'm', stop_reason: 'end_turn', stop_sequence: null, content: [{ type: 'text', text: texto }], usage: { input_tokens: 1, output_tokens: 1 } });
+
+test('pela rede: Opus 5.5 vai ao endpoint beta com a chave, o cabeçalho de reenvio e sem parâmetros removidos', async () => {
+  const s = await servidorLocal(mensagem('{"ok":true}'));
+  const antes = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_BASE_URL = s.base;
+  try {
+    const out = await lerNota({ apiKey: 'sk-ant-api03-' + 'k'.repeat(40), model: 'claude-opus-5-5', prompt: 'leia', images: IMGS });
+    assert.deepEqual(out, { ok: true });
+    const p = s.pedidos[0];
+    assert.equal(p.metodo, 'POST');
+    assert.equal(p.url, '/v1/messages?beta=true');
+    assert.equal(p.headers['x-api-key'], 'sk-ant-api03-' + 'k'.repeat(40));
+    assert.equal(p.headers['anthropic-version'], '2023-06-01');
+    assert.match(p.headers['anthropic-beta'], /server-side-fallback-2026-07-01/);
+    assert.equal(p.body.fallbacks, 'default');
+    for (const proibido of ['temperature', 'top_p', 'top_k', 'thinking', 'budget_tokens', 'tool_choice']) assert.equal(p.body[proibido], undefined, proibido + ' não pode ser enviado a este modelo');
+    assert.equal(p.body.max_tokens, 16000);
+    assert.equal(p.body.messages.length, 1);
+    assert.ok(!JSON.stringify(p.headers).includes('authorization'), 'a chave vai só em x-api-key');
+  } finally { if (antes === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = antes; s.server.close(); }
+});
+
+test('pela rede: Haiku 5.5 usa o endpoint comum, sem reenvio automático', async () => {
+  const s = await servidorLocal(mensagem('{"ok":1}'));
+  const antes = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_BASE_URL = s.base;
+  try {
+    await lerNota({ apiKey: 'sk-ant-api03-' + 'k'.repeat(40), model: 'claude-haiku-5-5', prompt: 'leia', images: IMGS });
+    const p = s.pedidos[0];
+    assert.equal(p.url, '/v1/messages');
+    assert.equal(p.headers['anthropic-beta'], undefined);
+    assert.equal(p.body.fallbacks, undefined);
+  } finally { if (antes === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = antes; s.server.close(); }
+});
+
+test('cancelar no meio devolve "cancelled" e não deixa o pedido pendurado', async () => {
+  const server = http.createServer(() => { /* nunca responde */ });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const antes = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:' + server.address().port;
+  const ctl = new AbortController();
+  try {
+    const p = lerNota({ apiKey: 'sk-ant-api03-' + 'k'.repeat(40), model: 'claude-haiku-5-5', prompt: 'leia', images: IMGS, signal: ctl.signal });
+    setTimeout(() => ctl.abort(), 150);
+    await assert.rejects(p, { code: 'cancelled' });
+  } finally { if (antes === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = antes; server.closeAllConnections(); server.close(); }
+});
+
+test('erros desconhecidos e já classificados passam como devem', () => {
+  assert.equal(mapError(new Error('boom')).code, 'upstream_error');
+  const nosso = Object.assign(new Error('x'), { code: 'sem_chave' });
+  assert.equal(mapError(nosso), nosso);
+  assert.equal(mapError('texto').code, 'upstream_error');
+  const h = new Headers();
+  assert.equal(mapError(new Anthropic.PermissionDeniedError(403, {}, 'negado', h)).code, 'chave_invalida');
+});

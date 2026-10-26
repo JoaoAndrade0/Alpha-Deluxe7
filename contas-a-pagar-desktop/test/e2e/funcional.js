@@ -1,6 +1,6 @@
 'use strict';
 // Teste de ponta a ponta: abre o programa de verdade (Electron) com uma pasta compartilhada de
-// mentira e um servidor no lugar da API do Claude. Precisa de tela (no Linux: xvfb-run -a node test/e2e/run.js).
+// mentira e um servidor no lugar da API do Claude. Precisa de tela (no Linux: xvfb-run -a node test/e2e/funcional.js).
 const { _electron: electron } = require('playwright');
 const http = require('http');
 const fs = require('fs');

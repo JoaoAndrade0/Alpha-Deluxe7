@@ -19,6 +19,13 @@ class Config {
     this.safe = safeStorage || null;
     this.data = {};
     try { this.data = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch (e) { this.data = {}; }
+    this._restringirPermissao();
+  }
+
+  // O arquivo pode guardar a chave: deixa só o seu usuário ler, mesmo se ele já existia com permissão aberta.
+  _restringirPermissao() {
+    if (process.platform === 'win32') return;
+    try { if (fs.existsSync(this.file) && (fs.statSync(this.file).mode & 0o077)) fs.chmodSync(this.file, 0o600); } catch (e) { /* sem permissão para mudar: segue */ }
   }
 
   _save() {

@@ -55,4 +55,4 @@ npx electron-builder --publish never   # gera o instalador do sistema em que est
 - `lib/store.js`: dados em arquivos. `lib/claude.js`: leitura de notas com o SDK oficial. `lib/config.js`: configurações.
 - `main.js` / `preload.js`: janela e ponte segura. `renderer/`: a tela. `renderer/shim.js` liga a tela à pasta e à API.
 - Teste completo com o programa aberto de verdade (precisa de tela virtual no Linux e do pacote `playwright`):
-  `xvfb-run -a node test/e2e/run.js`. Para testar o programa já empacotado, defina `APP_EXE`.
+  `xvfb-run -a node test/e2e/todos.js`. Para testar o programa já empacotado, defina `APP_EXE`.

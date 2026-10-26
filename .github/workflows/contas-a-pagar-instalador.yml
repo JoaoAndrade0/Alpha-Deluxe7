@@ -44,12 +44,14 @@ jobs:
       - run: npm ci
       - name: Dependências sem falhas conhecidas de gravidade alta
         run: npm run audit
-      - name: Testes de unidade
-        run: npm test
-      - name: Programa aberto de verdade (teste completo)
+      - name: Testes de unidade (com cobertura)
+        run: |
+          npm run test:cobertura | tee cobertura.txt
+          { echo '### Cobertura dos testes de unidade'; echo '```'; sed -n '/start of coverage report/,/end of coverage report/p' cobertura.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Programa aberto de verdade (funcional, segurança, robustez e acessibilidade)
         env:
           OUT: ${{ runner.temp }}/capturas
-        run: xvfb-run -a node test/e2e/run.js
+        run: xvfb-run -a node test/e2e/todos.js
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -85,6 +87,8 @@ jobs:
           cache: npm
           cache-dependency-path: contas-a-pagar-desktop/package-lock.json
       - run: npm ci
+      - name: Testes de unidade neste sistema
+        run: npm test
       - name: Gerar o instalador
         run: npx electron-builder ${{ matrix.alvo }} --publish never
       - name: Abrir o programa empacotado e conferir (teste de fumaça)
