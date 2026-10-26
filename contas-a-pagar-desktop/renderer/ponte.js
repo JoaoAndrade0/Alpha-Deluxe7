@@ -39,6 +39,7 @@
     collection: colecao => ({
       path: colecao,
       doc: id => doc(colecao, id || novoId()),
+      get: async () => instantaneo(await chamar('db:list', colecao)),
       onSnapshot(next, error) {
         const id = proxima++;
         assinaturas.set(id, { next, error });

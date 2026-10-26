@@ -104,7 +104,48 @@ const espera = ms => new Promise(r => setTimeout(r, ms));
   passo('300 compras com 12 parcelas: abre em ' + (abrir / 1000).toFixed(1) + ' s e marcar uma parcela responde em ' + clique + ' ms');
   await g.app.close();
 
-  assert.deepEqual(amb.erros.concat(amb2.erros), [], 'sem erros no console');
+  /* ---------- pasta que não dá para abrir, e o que foi criado sobrevive a fechar e abrir ---------- */
+  const ruim = await criarAmbiente({ semear: false });
+  const arquivo = path.join(ruim.compartilhada, 'isto-e-um-arquivo.txt');
+  fs.writeFileSync(arquivo, 'x');
+  fs.writeFileSync(path.join(ruim.dadosDoPrograma, 'config.json'), JSON.stringify({ dataDir: arquivo }));
+  const r1 = await ruim.lancar();
+  await r1.janela.waitForSelector('dialog#cfg[open]', { timeout: 20000 });
+  assert.match(await r1.janela.textContent('#cfg-dir'), /não consegui abrir esta pasta/);
+  assert.equal(await r1.janela.$eval('#cfg-close', b => b.disabled), true, 'não deixa fechar sem uma pasta que funcione');
+  assert.ok(await r1.janela.isVisible('#notice'), 'a tela explica o que fazer');
+  assert.equal(await r1.janela.isVisible('#uploader'), false, 'sem pasta, o envio de nota fica escondido');
+  await r1.app.close();
+  passo('pasta escolhida que não abre (é um arquivo): o programa explica, bloqueia o envio de nota e não deixa fechar as configurações');
+
+  const dur = await criarAmbiente({ semear: false });
+  const d1 = await dur.lancar();
+  await d1.janela.waitForSelector('#empty:not([hidden])', { timeout: 20000 });
+  await d1.janela.click('.sec-head [data-act=add-servico]');
+  await d1.janela.waitForFunction(() => document.activeElement && document.activeElement.classList.contains('svc-name'));
+  await d1.janela.keyboard.type('Obra da Maria');
+  await d1.janela.keyboard.press('Enter');
+  await d1.janela.click('.svc [data-act=add-compra]');
+  await d1.janela.waitForFunction(() => document.activeElement && document.activeElement.dataset.f === 'total');
+  await d1.janela.keyboard.type('900');
+  await d1.janela.keyboard.press('Tab');
+  await d1.janela.keyboard.type('3');
+  await d1.janela.keyboard.press('Enter');
+  await d1.janela.click('.compra .box[data-i="0"]');
+  await espera(600);
+  await d1.app.close();
+  const d2 = await dur.lancar(); // fecha e abre de novo, como no dia seguinte
+  await d2.janela.waitForSelector('.compra', { timeout: 20000 });
+  assert.equal(await d2.janela.inputValue('.svc-name'), 'Obra da Maria');
+  assert.equal(await d2.janela.inputValue('.compra [data-f=total]'), '900,00');
+  assert.equal(await d2.janela.inputValue('.compra [data-f=parcela]'), '300,00', 'a parcela foi calculada: 900 ÷ 3');
+  assert.equal(await d2.janela.locator('.compra .box[aria-pressed=true]').count(), 1);
+  assert.equal(semNbsp(await d2.janela.textContent('#s-paid')), 'R$ 300,00');
+  await d2.app.close();
+  passo('serviço, compra, valor, parcelas e parcela paga criados só pelo teclado continuam lá depois de fechar e abrir o programa');
+
+  assert.deepEqual(amb.erros.concat(amb2.erros, ruim.erros, dur.erros), [], 'sem erros no console');
+  ruim.fechar(); dur.fechar();
   amb.fechar(); amb2.fechar();
   console.log('\nROBUSTEZ OK.');
 })().catch(e => { console.error('FALHOU:', e); process.exit(1); });

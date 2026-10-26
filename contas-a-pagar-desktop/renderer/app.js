@@ -26,12 +26,38 @@
     gravando++; mostrarSituacao();
     return promessa.then(() => { falhou = false; }, () => { falhou = true; }).finally(() => { gravando--; mostrarSituacao(); });
   }
+  // Edições ainda sendo gravadas ficam "por cima" do que veio do disco. Assim, a próxima edição (e os valores que
+  // ela calcula, como a parcela a partir do total) sempre enxerga as anteriores, mesmo digitando muito rápido.
+  const pendentes = new Map(); // "compras/id" -> { n: gravações em andamento, mudanca }
+  const colecaoLocal = c => (c === 'compras' ? compras : servicos);
+  function sobrepor(colecao, id, objeto) {
+    const p = pendentes.get(colecao + '/' + id);
+    if (!p) return objeto;
+    for (const k of Object.keys(p.mudanca)) objeto[k] = k === 'pagas' ? { ...objeto.pagas, ...p.mudanca.pagas } : p.mudanca[k];
+    return objeto;
+  }
+  async function recarregarDoDisco() { // depois de uma gravação que falhou, volta ao que realmente está no disco
+    try {
+      const [s, c] = await Promise.all([db.collection('servicos').get(), db.collection('compras').get()]);
+      servicos.clear(); s.docs.forEach(d => servicos.set(d.id, C.normServico(d.data() || {})));
+      compras.clear(); c.docs.forEach(d => compras.set(d.id, sobrepor('compras', d.id, C.normCompra(d.data() || {}, hoje))));
+      agendar();
+    } catch (e) { /* sem acesso à pasta: o aviso de falha já está na tela */ }
+  }
   const filas = new Map(); // uma gravação por vez em cada registro, na ordem em que a pessoa agiu
   function alterar(colecao, id, mudanca) {
     const caminho = colecao + '/' + id;
+    const p = pendentes.get(caminho) || { n: 0, mudanca: {} };
+    p.n++;
+    for (const k of Object.keys(mudanca)) p.mudanca[k] = k === 'pagas' ? { ...p.mudanca.pagas, ...mudanca.pagas } : mudanca[k];
+    pendentes.set(caminho, p);
+    const atual = colecaoLocal(colecao).get(id);
+    if (atual) { sobrepor(colecao, id, atual); agendar(); } // a tela já mostra o resultado, sem esperar o disco
     const anterior = filas.get(caminho) || Promise.resolve();
     const proxima = anterior.catch(() => {}).then(() => db.doc(caminho).update(mudanca));
     filas.set(caminho, proxima);
+    const fim = () => { p.n--; if (p.n === 0) pendentes.delete(caminho); };
+    proxima.then(fim, () => { fim(); recarregarDoDisco(); });
     return acompanhar(proxima);
   }
 
@@ -367,11 +393,11 @@
     aviso.hidden = false;
   };
   db.collection('servicos').onSnapshot(snap => {
-    servicos.clear(); snap.docs.forEach(d => servicos.set(d.id, C.normServico(d.data() || {})));
+    servicos.clear(); snap.docs.forEach(d => servicos.set(d.id, sobrepor('servicos', d.id, C.normServico(d.data() || {}))));
     pronto.s = true; agendar();
   }, aoFalhar);
   db.collection('compras').onSnapshot(snap => {
-    compras.clear(); snap.docs.forEach(d => compras.set(d.id, C.normCompra(d.data() || {}, hoje)));
+    compras.clear(); snap.docs.forEach(d => compras.set(d.id, sobrepor('compras', d.id, C.normCompra(d.data() || {}, hoje))));
     pronto.c = true; agendar();
   }, aoFalhar);
 
