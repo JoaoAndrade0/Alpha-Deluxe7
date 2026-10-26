@@ -1,0 +1,77 @@
+name: Contas a Pagar - gerar instaladores
+
+# Como usar:
+#   1) Actions > "Contas a Pagar - gerar instaladores" > Run workflow  (gera os arquivos para baixar)
+#   2) Ou crie uma tag "contas-v1.0.0": além de gerar, publica em Releases para facilitar o download.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'contas-v*'
+
+defaults:
+  run:
+    working-directory: contas-a-pagar-desktop
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: contas-a-pagar-desktop/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  instalador:
+    needs: testes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            alvo: --win
+            nome: windows
+          - os: macos-latest
+            alvo: --mac
+            nome: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: contas-a-pagar-desktop/package-lock.json
+      - run: npm ci
+      - run: npx electron-builder ${{ matrix.alvo }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-${{ matrix.nome }}
+          path: |
+            contas-a-pagar-desktop/dist/*.exe
+            contas-a-pagar-desktop/dist/*.dmg
+          if-no-files-found: error
+
+  publicar:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: instalador
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: instaladores
+          merge-multiple: true
+      - name: Publicar em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" instaladores/* --repo "${{ github.repository }}" --title "Contas a Pagar ${{ github.ref_name }}" --notes "Instaladores do programa Contas a Pagar. No Windows, baixe o arquivo .exe. No Mac, baixe o .dmg."

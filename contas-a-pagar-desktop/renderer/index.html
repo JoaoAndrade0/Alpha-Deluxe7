@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contas a Pagar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap" id="app">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Compras parceladas no cartão</p>
+      <h1>Contas a pagar</h1>
+    </div>
+    <div class="top-right">
+      <p class="save" id="save" role="status" aria-live="polite">Carregando…</p>
+      <button class="btn ghost sm" type="button" id="cfg-btn">Configurações</button>
+    </div>
+  </header>
+
+  <section class="uploader" id="uploader" aria-labelledby="h-up">
+    <div class="up-head">
+      <h2 id="h-up">Enviar nota</h2>
+      <label class="up-target">Lançar em
+        <select id="up-servico"><option value="__new__">Novo serviço (nome da loja)</option></select>
+      </label>
+    </div>
+    <div class="drop" id="drop">
+      <p class="drop-text" id="drop-text">Envie a foto ou o PDF da nota. O sistema lê o valor e as parcelas e cria a compra no serviço escolhido. Você também pode arrastar o arquivo até aqui ou colar um print.</p>
+      <button class="btn" type="button" id="pick-btn" disabled>Escolher foto ou PDF</button>
+      <input type="file" id="pick" accept="image/*,application/pdf" multiple hidden>
+    </div>
+    <ul class="up-list" id="up-list" aria-live="polite"></ul>
+  </section>
+
+  <section class="sum" aria-label="Resumo geral">
+    <div class="fig"><span class="lab">Total das parcelas</span><strong id="s-total">R$ 0,00</strong></div>
+    <div class="fig good"><span class="lab">Já pago</span><strong id="s-paid">R$ 0,00</strong></div>
+    <div class="fig"><span class="lab">Falta pagar</span><strong id="s-left">R$ 0,00</strong></div>
+    <div class="meter" role="progressbar" aria-label="Parte já paga" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="s-meter"><i id="s-bar"></i></div>
+    <p class="meter-cap" id="s-cap">Carregando…</p>
+  </section>
+
+  <section class="sec" aria-labelledby="h-meses">
+    <h2 id="h-meses">Mês a mês</h2>
+    <ol class="months" id="months"><li class="m-empty">Carregando…</li></ol>
+  </section>
+
+  <section class="sec" aria-labelledby="h-serv">
+    <div class="sec-head">
+      <h2 id="h-serv">Serviços</h2>
+      <button class="btn" type="button" data-act="add-servico">+ Novo serviço</button>
+    </div>
+    <div class="notice" id="notice" hidden></div>
+    <div id="servicos"><p class="muted" id="loading">Carregando contas…</p></div>
+    <div class="empty" id="empty" hidden>
+      <h3>Nenhum serviço lançado</h3>
+      <p>Crie um serviço, por exemplo o nome do fornecedor, e adicione as compras parceladas no cartão. Os totais de cada mês aparecem no resumo acima.</p>
+      <button class="btn" type="button" data-act="add-servico">+ Novo serviço</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="cfg" aria-labelledby="cfg-title">
+  <div class="cfg-form">
+    <h2 id="cfg-title">Configurações</h2>
+
+    <section class="cfg-sec">
+      <h3>Pasta de dados</h3>
+      <p class="muted">Escolha uma pasta que todos os computadores sincronizam (OneDrive, Google Drive ou Dropbox). Cada pessoa escolhe a mesma pasta no próprio computador e vê os mesmos dados.</p>
+      <p class="cfg-path" id="cfg-dir">Nenhuma pasta escolhida</p>
+      <div class="cfg-row">
+        <button class="btn" type="button" id="cfg-pick">Escolher pasta…</button>
+        <button class="link" type="button" id="cfg-openfolder" hidden>Abrir a pasta</button>
+      </div>
+    </section>
+
+    <section class="cfg-sec">
+      <h3>Leitura de notas pelo Claude</h3>
+      <p class="muted">A leitura usa a API do Claude, cobrada à parte na sua conta da Anthropic, em geral poucos centavos de dólar por nota. Crie uma chave em <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> e cole abaixo. A chave fica guardada só neste computador.</p>
+      <label class="fld">Chave da API
+        <input type="password" id="cfg-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+      </label>
+      <div class="cfg-row">
+        <button class="btn" type="button" id="cfg-savekey">Salvar chave</button>
+        <button class="link" type="button" id="cfg-testkey" hidden>Testar chave</button>
+        <button class="link danger" type="button" id="cfg-clearkey" hidden>Remover chave</button>
+      </div>
+      <p class="muted" id="cfg-keystatus" role="status" aria-live="polite"></p>
+      <label class="fld">Modelo
+        <select id="cfg-model"></select>
+      </label>
+    </section>
+
+    <div class="cfg-foot">
+      <span class="muted" id="cfg-ver"></span>
+      <button class="btn" type="button" id="cfg-close">Fechar</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="shim.js"></script>
+<script src="app.js"></script>
+<script src="settings.js"></script>
+</body>
+</html>
