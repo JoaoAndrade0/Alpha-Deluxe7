@@ -152,8 +152,6 @@ h2{font:600 21px/1.2 var(--f-display);margin:0;letter-spacing:-.01em}
 .c-links{display:flex;gap:16px;align-items:center}
 .flash{animation:flash 1.7s ease-out}
 @keyframes flash{from{background:var(--accent-soft)}to{background:transparent}}
-.ro .uploader{display:none}
-.ro [data-act]{display:none}
 @media (prefers-reduced-motion:reduce){.meter i{transition:none}.flash{animation:none}}
 
 /* programa de computador */
@@ -171,3 +169,4 @@ h2{font:600 21px/1.2 var(--f-display);margin:0;letter-spacing:-.01em}
 dialog#cfg{border:1px solid var(--line-2);border-radius:12px;background:var(--surface);color:var(--ink);padding:22px}
 dialog#cfg::backdrop{background:rgba(10,12,24,.55)}
 .fld input[type="password"]{font:500 16px/1.3 var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
+.aviso{margin:0;padding:10px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:500}

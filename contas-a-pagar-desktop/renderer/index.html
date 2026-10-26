@@ -91,6 +91,7 @@
         <button class="link danger" type="button" id="cfg-clearkey" hidden>Remover chave</button>
       </div>
       <p class="muted" id="cfg-keystatus" role="status" aria-live="polite"></p>
+      <p class="aviso" id="cfg-keywarn" hidden>Este computador não oferece criptografia do sistema. A chave fica num arquivo que só o seu usuário consegue ler, mas sem criptografia.</p>
       <label class="fld">Modelo
         <select id="cfg-model"></select>
       </label>
@@ -103,8 +104,14 @@
   </div>
 </dialog>
 
-<script src="shim.js"></script>
+<script src="lib/meses.js"></script>
+<script src="lib/dinheiro.js"></script>
+<script src="lib/calculo.js"></script>
+<script src="lib/mensagens.js"></script>
+<script src="ponte.js"></script>
+<script src="preparo.js"></script>
+<script src="envio.js"></script>
+<script src="configuracoes.js"></script>
 <script src="app.js"></script>
-<script src="settings.js"></script>
 </body>
 </html>

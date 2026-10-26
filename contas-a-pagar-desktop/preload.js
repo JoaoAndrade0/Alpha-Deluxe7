@@ -7,7 +7,7 @@ const INVOKE = new Set([
   'config:get', 'config:chooseDir', 'config:setKey', 'config:clearKey', 'config:setModel', 'config:testKey',
   'shell:open', 'folder:open',
   'db:list', 'db:get', 'db:set', 'db:update', 'db:delete', 'db:subscribe', 'db:unsubscribe',
-  'nota:save', 'nota:read', 'nota:cancel'
+  'nota:save', 'nota:ler', 'nota:cancel'
 ]);
 const ON = new Set(['db:snapshot', 'db:error', 'menu:settings']);
 

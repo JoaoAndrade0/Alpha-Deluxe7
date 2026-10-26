@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { chave } = require('./validar');
 
 const MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (mais preciso, recomendado)' },
@@ -37,9 +38,9 @@ class Config {
     this.data.model = id; this._save();
   }
 
+  // Confere o formato da chave (começa com sk-ant-) antes de guardar.
   setKey(key) {
-    key = String(key || '').trim();
-    if (!key) throw new Error('Informe a chave.');
+    key = chave(key);
     if (this.safe && this.safe.isEncryptionAvailable()) {
       this.data.apiKeyEnc = this.safe.encryptString(key).toString('base64');
       delete this.data.apiKeyPlain;
@@ -65,8 +66,15 @@ class Config {
     return k ? '…' + k.slice(-4) : '';
   }
 
+  // 'sistema' = criptografada pelo sistema; 'arquivo' = só protegida por permissão de arquivo (sistema sem chaveiro); '' = sem chave.
+  get keyStorage() {
+    if (this.data.apiKeyEnc) return 'sistema';
+    if (this.data.apiKeyPlain) return 'arquivo';
+    return '';
+  }
+
   publicView() {
-    return { dataDir: this.dataDir, model: this.model, models: MODELS, hasKey: !!this.getKey(), keyHint: this.keyHint() };
+    return { dataDir: this.dataDir, model: this.model, models: MODELS, hasKey: !!this.getKey(), keyHint: this.keyHint(), keyStorage: this.keyStorage };
   }
 }
 
