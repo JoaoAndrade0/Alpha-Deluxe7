@@ -38,7 +38,7 @@
 
   const ERROS_DE_EXPORTACAO = {
     sem_pasta: 'Escolha a pasta de dados em Configurações antes de exportar.',
-    sem_gravar_planilha: 'Não consegui salvar a planilha nesse lugar. Escolha outra pasta, por exemplo Documentos.'
+    sem_gravar_planilha: 'Não consegui salvar a planilha nesse lugar. Se ela estiver aberta no Excel, feche e tente de novo, ou escolha outra pasta, por exemplo Documentos.'
   };
   const mensagemDeExportacao = e => (e && Object.prototype.hasOwnProperty.call(ERROS_DE_EXPORTACAO, e.code) ? ERROS_DE_EXPORTACAO[e.code] : 'Não foi possível exportar agora. Tente de novo.');
 

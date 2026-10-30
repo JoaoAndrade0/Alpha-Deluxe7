@@ -177,7 +177,7 @@ const tmp = p => fs.mkdtempSync(path.join(os.tmpdir(), p));
 
   await responder({ canceled: false, filePath: path.join(pastaDaPlanilha, 'nao-existe', 'x.csv') });
   await clicarExportar();
-  assert.match(await win.textContent('#export-msg'), /Não consegui salvar a planilha nesse lugar\. Escolha outra pasta/);
+  assert.match(await win.textContent('#export-msg'), /Não consegui salvar a planilha nesse lugar\. Se ela estiver aberta no Excel, feche e tente de novo, ou escolha outra pasta/);
   assert.equal(await win.$eval('#export-msg', e => e.classList.contains('bad')), true);
   assert.equal(fs.existsSync(path.join(pastaDaPlanilha, 'nao-existe')), false, 'o programa não cria pastas por conta própria');
   step('exportar: lugar sem permissão mostra mensagem clara em vez de falhar calado');

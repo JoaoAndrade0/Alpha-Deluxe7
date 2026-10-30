@@ -64,6 +64,8 @@ Em **Mês a mês**, o botão **Exportar planilha** pergunta onde salvar e grava 
   arquivo escolhendo ponto e vírgula como separador e o português do Brasil como localidade, senão `1234,56` pode ser lido como 123456.
 - Nomes e descrições que começam com `=`, `+`, `-` ou `@` ganham um apóstrofo na frente. Uma nota com texto escondido
   não consegue colocar uma fórmula na planilha do seu contador.
+- Se você exportar de novo com o mesmo nome e a planilha anterior ainda estiver aberta no Excel, o Windows não deixa sobrescrever:
+  o programa avisa; feche a planilha e tente de novo, ou escolha outro nome.
 - Só entram as compras que aparecem na tela (as de um serviço apagado ficam de fora). Quem escolhe onde gravar é você, na janela do
   sistema; a tela do programa não consegue gravar em outro lugar.
 

@@ -35,7 +35,7 @@ test('mensagens da chave', () => {
 
 test('mensagens da exportação para planilha', () => {
   assert.match(mensagemDeExportacao({ code: 'sem_pasta' }), /pasta de dados/);
-  assert.match(mensagemDeExportacao({ code: 'sem_gravar_planilha' }), /outra pasta/);
+  assert.match(mensagemDeExportacao({ code: 'sem_gravar_planilha' }), /aberta no Excel.*outra pasta/);
   const padrao = mensagemDeExportacao(null);
   assert.match(padrao, /exportar/);
   for (const e of [undefined, {}, { code: '__proto__' }, { code: 'constructor' }, { code: 'toString' }, 'texto', 42, { code: 'upstream_error', message: 'EACCES: /home/x/segredo' }]) {
