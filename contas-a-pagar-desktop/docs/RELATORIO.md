@@ -123,7 +123,7 @@ Riscos que ficam:
 
 ## Testes
 
-São 95 testes de unidade e 42 verificações com o programa aberto de verdade, mais a abertura do programa já empacotado no Windows e no Mac, tudo rodando sozinho no GitHub a cada envio.
+São 95 testes de unidade e 42 verificações com o programa aberto de verdade, mais a abertura do programa já empacotado no Windows e no Mac, tudo rodando sozinho no GitHub a cada envio. Para procurar testes instáveis, rodei a bateria completa 8 vezes seguidas num mesmo computador: 336 verificações, nenhuma falha.
 
 | Camada | O que cobre | Resultado |
 | --- | --- | --- |
