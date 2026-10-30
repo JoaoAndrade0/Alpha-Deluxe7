@@ -132,7 +132,7 @@ São 95 testes de unidade e 42 verificações com o programa aberto de verdade, 
 | Segurança (11) | ataques descritos na seção anterior, inclusive a planilha | passou |
 | Robustez (10) | dados hostis e quebrados; 300 compras (abre em 0,5 s); edição ao mesmo tempo que outro computador; exclusões; pasta inválida; trocar de pasta; "tentar de novo" sem duplicar; fechar e abrir | passou |
 | Acessibilidade (7) | axe-core em 10 estados, teclado (inclui exportar), zoom, contraste | passou |
-| Programa empacotado | abre, lê a pasta, não enxerga Node e não dá erro, no Windows e no Mac do GitHub | Até 30 de outubro, Windows: 8 de 8 execuções. Mac: 7 de 8; a falha (execução 3) foi o programa não mostrar os dados a tempo ao abrir. Reforcei a assinatura de dados e não voltou nas 5 execuções seguintes, mas pode ser intermitente |
+| Programa empacotado | abre, lê a pasta, não enxerga Node e não dá erro, no Windows e no Mac do GitHub | Windows: passou em todas as execuções. Mac: falhou uma vez (a 3ª execução: o programa não mostrou os dados a tempo ao abrir) e passou em todas as outras. Depois que reforcei a assinatura de dados não falhou mais, mas pode ser intermitente |
 | Revisão de código independente | 10 apontamentos sobre cancelamento, troca de pasta, cálculo de parcela, ordem de leituras, repetição, desempenho, mês de pagamento, PDF, README e teste de chave | os 10 foram corrigidos e têm teste |
 
 Problemas que os próprios testes pegaram e que já foram corrigidos:
