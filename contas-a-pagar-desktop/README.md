@@ -7,6 +7,7 @@ usam os mesmos dados ao mesmo tempo.
 - O resumo mostra o total, quanto já foi pago, quanto falta e **o valor de cada mês**.
 - **Enviar nota**: você escolhe a foto (ou o PDF) da nota e o programa lê o valor e as parcelas e já cria a compra.
   A compra nasce marcada como "Lido da nota. Confira antes de pagar", com a miniatura da nota.
+- **Exportar planilha**: um arquivo CSV com uma linha por parcela, para mandar ao contador (veja abaixo).
 
 Relatório completo do projeto (estrutura, design, segurança e testes): [docs/RELATORIO.md](docs/RELATORIO.md).
 
@@ -48,6 +49,24 @@ Por segurança, o programa não faz mais de 30 leituras em 10 minutos.
   mês da compra. Dá para ajustar em "1ª parcela em".
 - Meses anteriores ao atual, com parcela em aberto, aparecem como "Atrasado".
 
+## Planilha para o contador
+
+Em **Mês a mês**, o botão **Exportar planilha** pergunta onde salvar e grava `contas-a-pagar-AAAA-MM-DD.csv`
+(o botão só aparece quando há parcelas lançadas). O arquivo tem **uma linha por parcela**, em ordem de mês:
+
+`Serviço; Compra; Nº da parcela; Total de parcelas; Mês; Valor da parcela (R$); Total da compra (R$); Situação; Data da compra; A conferir`
+
+- **Situação** é Paga, Em aberto ou Atrasada (parcela de mês anterior ao atual que não foi paga). **A conferir** é "Sim" para
+  compras lidas de uma nota que ninguém marcou como "Está certo".
+- O formato é o brasileiro: campos separados por ponto e vírgula, vírgula nos centavos (`1234,56`) e acentos em UTF-8.
+  Foi pensado para o Excel em português e para o Google Planilhas com localidade Brasil. Não testei num Excel de verdade;
+  o que está testado é que o arquivo volta exatamente igual ao que foi escrito. Se o Excel estiver em inglês, importe o
+  arquivo escolhendo ponto e vírgula como separador e o português do Brasil como localidade, senão `1234,56` pode ser lido como 123456.
+- Nomes e descrições que começam com `=`, `+`, `-` ou `@` ganham um apóstrofo na frente. Uma nota com texto escondido
+  não consegue colocar uma fórmula na planilha do seu contador.
+- Só entram as compras que aparecem na tela (as de um serviço apagado ficam de fora). Quem escolhe onde gravar é você, na janela do
+  sistema; a tela do programa não consegue gravar em outro lugar.
+
 ## Dados e segurança
 
 - Os dados ficam em arquivos na pasta compartilhada: `servicos/`, `compras/` e `notas/` (fotos e PDFs originais).
@@ -64,7 +83,7 @@ Por segurança, o programa não faz mais de 30 leituras em 10 minutos.
 ```
 npm ci
 npm start                 # abre o programa
-npm test                  # 80 testes de unidade
+npm test                  # 95 testes de unidade
 npm run test:cobertura    # os mesmos, com a cobertura de linhas e ramos
 npm run test:e2e          # com o programa aberto de verdade (Linux: precisa de xvfb); roda 4 baterias
 npm run audit             # dependências sem falhas conhecidas de gravidade alta
@@ -74,7 +93,7 @@ npx electron-builder --publish never   # gera o instalador do sistema em que est
 ```
 main.js, preload.js        janela, protocolo seguro app://, canais de comunicação (IPC)
 lib/                       processo principal: store (dados em arquivos), config, claude (SDK oficial),
-                           nota (pedido e conferência da leitura), validar (argumentos do IPC), limites
+                           nota (pedido e conferência da leitura), exportar (planilha CSV), validar (argumentos do IPC), limites
 renderer/                  a tela (HTML, CSS e scripts sem bundler)
   lib/                     regras puras, usadas pela tela e pelo processo principal: dinheiro, meses, calculo, mensagens
   ponte.js                 única porta da tela para dados, leitura de notas e arquivos

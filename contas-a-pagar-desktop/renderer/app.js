@@ -79,6 +79,7 @@
 
     const lista = $('#months');
     const chaves = [...meses.keys()];
+    $('#export-btn').hidden = !chaves.length;
     if (!chaves.length) {
       lista.innerHTML = '<li class="m-empty">Os meses aparecem aqui quando você lançar a primeira compra parcelada.</li>';
       return;
@@ -369,6 +370,24 @@
   });
   area.addEventListener('focusout', () => agendar());
 
+  /* ---------- planilha para o contador ---------- */
+  const botaoExportar = $('#export-btn'), msgExportar = $('#export-msg');
+  let exportando = false; // sem desabilitar o botão: quem usa o teclado não pode perder o foco
+  function avisoDeExportacao(texto, ruim) {
+    msgExportar.textContent = texto;
+    msgExportar.classList.toggle('bad', !!ruim);
+    msgExportar.hidden = !texto;
+  }
+  botaoExportar.addEventListener('click', async () => {
+    if (exportando || !db) return;
+    exportando = true; botaoExportar.setAttribute('aria-busy', 'true'); avisoDeExportacao('');
+    try {
+      const r = await C.ponte.exportarPlanilha();
+      if (r) avisoDeExportacao('Planilha salva como ' + r.arquivo + ' (' + r.linhas + (r.linhas === 1 ? ' parcela' : ' parcelas') + ').');
+    } catch (e) { avisoDeExportacao(C.mensagemDeExportacao(e), true); }
+    finally { exportando = false; botaoExportar.removeAttribute('aria-busy'); }
+  });
+
   /* ---------- conexão com a pasta de dados ---------- */
   mostrarSituacao();
   const cfg = C.ponte ? await C.ponte.pronto : null;
@@ -382,6 +401,7 @@
     $('#months').innerHTML = '<li class="m-empty">Sem dados para mostrar.</li>';
     $('#s-cap').textContent = 'Sem dados para mostrar.';
     document.querySelectorAll('[data-act]').forEach(b => { b.hidden = true; });
+    botaoExportar.hidden = true;
     $('#uploader').hidden = true;
     mostrarSituacao();
     return;

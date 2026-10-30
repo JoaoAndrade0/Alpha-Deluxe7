@@ -135,6 +135,56 @@ const tmp = p => fs.mkdtempSync(path.join(os.tmpdir(), p));
   assert.match(await win.textContent('.up-item.err .up-state'), /não parece uma nota/);
   step('arquivo que não é nota mostra mensagem clara e não cria compra');
 
+  /* ---------- 6b) exportar planilha para o contador ---------- */
+  const pastaDaPlanilha = tmp('e2e-export-');
+  const destino = path.join(pastaDaPlanilha, 'planilha.csv');
+  // A janela de "salvar" do sistema não dá para clicar num teste: ela é trocada por uma que responde o que o teste mandar.
+  await app.evaluate(({ dialog }) => { global.__chamadasSalvar = 0; global.__respostaSalvar = null; dialog.showSaveDialog = async () => { global.__chamadasSalvar++; return global.__respostaSalvar; }; });
+  const responder = r => app.evaluate((_, resposta) => { global.__respostaSalvar = resposta; }, r);
+  const clicarExportar = async () => { await win.click('#export-btn'); await win.waitForFunction(() => !document.querySelector('#export-btn').hasAttribute('aria-busy'), null, { timeout: 15000 }); };
+  await win.waitForSelector('#export-btn:not([hidden])');
+
+  await responder({ canceled: true, filePath: undefined });
+  await clicarExportar();
+  assert.equal(await app.evaluate(() => global.__chamadasSalvar), 1);
+  assert.equal(fs.existsSync(destino), false, 'cancelar não cria arquivo');
+  assert.equal(await win.$eval('#export-msg', e => e.hidden), true, 'cancelar não mostra mensagem');
+  step('exportar: cancelar a janela de salvar não grava nada nem mostra mensagem');
+
+  await responder({ canceled: false, filePath: destino });
+  await clicarExportar();
+  const msg = (await win.textContent('#export-msg')).replace(/ /g, ' ');
+  const esperadas = fs.readdirSync(path.join(root, 'compras')).map(f => JSON.parse(fs.readFileSync(path.join(root, 'compras', f), 'utf8'))).reduce((n, c) => n + c.parcelas, 0);
+  assert.match(msg, new RegExp('^Planilha salva como planilha\\.csv \\(' + esperadas + ' parcelas\\)\\.$'));
+  assert.equal(await win.$eval('#export-msg', e => e.classList.contains('bad')), false);
+  const bytes = fs.readFileSync(destino);
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'começa com a marca UTF-8 para o Excel');
+  const linhasCsv = bytes.subarray(3).toString('utf8').split('\r\n');
+  assert.equal(linhasCsv.pop(), '', 'termina com quebra de linha');
+  assert.equal(linhasCsv.length, esperadas + 1, 'cabeçalho + uma linha por parcela');
+  assert.equal(linhasCsv[0], 'Serviço;Compra;Nº da parcela;Total de parcelas;Mês;Valor da parcela (R$);Total da compra (R$);Situação;Data da compra;A conferir');
+  const celulas = linhasCsv.slice(1).map(l => l.split(';'));
+  assert.ok(celulas.every(c => c.length === 10));
+  const agora = new Date();
+  const mesAtual = String(agora.getMonth() + 1).padStart(2, '0') + '/' + agora.getFullYear();
+  assert.deepEqual(celulas[0], ['Serviço do Thayvson (CMD)', 'Loja PDF · ferragens', '1', '1', mesAtual, '90,00', '90,00', 'Em aberto', '', 'Sim'], 'a compra à vista do PDF entra no mês atual e vem antes das parcelas de novembro');
+  assert.deepEqual(celulas.find(c => c[1] === '' && c[2] === '1' && c[3] === '2'), ['Serviço do Thayvson (CMD)', '', '1', '2', '11/2026', '69,80', '139,60', 'Paga', '', 'Não'], 'a parcela marcada como paga no passo 2 sai como "Paga"');
+  const daNota = celulas.filter(c => c[1] === 'Casa do Pedreiro · cimento e argamassa');
+  assert.deepEqual(daNota.map(c => [c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9]]), [
+    ['1', '3', '11/2026', '411,52', '1234,56', 'Em aberto', '20/10/2026', 'Sim'], ['2', '3', '12/2026', '411,52', '1234,56', 'Em aberto', '20/10/2026', 'Sim'], ['3', '3', '01/2027', '411,52', '1234,56', 'Em aberto', '20/10/2026', 'Sim']
+  ], 'a compra lida da nota sai com "A conferir: Sim"');
+  step('exportar: grava a planilha onde a pessoa escolheu (' + esperadas + ' parcelas, acentos, valores em reais e situação certos)');
+
+  await responder({ canceled: false, filePath: path.join(pastaDaPlanilha, 'nao-existe', 'x.csv') });
+  await clicarExportar();
+  assert.match(await win.textContent('#export-msg'), /Não consegui salvar a planilha nesse lugar\. Escolha outra pasta/);
+  assert.equal(await win.$eval('#export-msg', e => e.classList.contains('bad')), true);
+  assert.equal(fs.existsSync(path.join(pastaDaPlanilha, 'nao-existe')), false, 'o programa não cria pastas por conta própria');
+  step('exportar: lugar sem permissão mostra mensagem clara em vez de falhar calado');
+  await responder({ canceled: false, filePath: destino });
+  await clicarExportar();
+  assert.equal(await win.$eval('#export-msg', e => e.classList.contains('bad')), false, 'a mensagem de erro some depois de uma exportação boa');
+
   /* ---------- 7) configurações ---------- */
   await win.click('#cfg-btn');
   await win.waitForSelector('dialog#cfg[open]');

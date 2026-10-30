@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { mensagemDeNota, mensagemDeChave, PEDE_CONFIGURACAO } = require('../renderer/lib/mensagens');
+const { mensagemDeNota, mensagemDeChave, mensagemDeExportacao, PEDE_CONFIGURACAO } = require('../renderer/lib/mensagens');
 
 test('todo erro que o envio de nota pode gerar tem texto próprio, em português e sem jargão', () => {
   const codigos = ['sem_chave', 'chave_invalida', 'sem_saldo', 'sem_internet', 'sem_pasta', 'rate_limited', 'image_rejected', 'img', 'too_large', 'sem_gravar', 'pdf', 'nao_nota', 'invalid_json', 'refused', 'empty_completion'];
@@ -31,4 +31,14 @@ test('mensagens da chave', () => {
   assert.match(mensagemDeChave({ code: 'sem_saldo' }, 'x'), /saldo/);
   assert.equal(mensagemDeChave({ code: 'outro' }, 'padrão'), 'padrão');
   assert.equal(mensagemDeChave({ code: '__proto__' }, 'padrão'), 'padrão');
+});
+
+test('mensagens da exportação para planilha', () => {
+  assert.match(mensagemDeExportacao({ code: 'sem_pasta' }), /pasta de dados/);
+  assert.match(mensagemDeExportacao({ code: 'sem_gravar_planilha' }), /outra pasta/);
+  const padrao = mensagemDeExportacao(null);
+  assert.match(padrao, /exportar/);
+  for (const e of [undefined, {}, { code: '__proto__' }, { code: 'constructor' }, { code: 'toString' }, 'texto', 42, { code: 'upstream_error', message: 'EACCES: /home/x/segredo' }]) {
+    assert.equal(mensagemDeExportacao(e), padrao, JSON.stringify(e));
+  }
 });

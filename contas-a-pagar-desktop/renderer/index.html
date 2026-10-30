@@ -43,7 +43,11 @@
   </section>
 
   <section class="sec" aria-labelledby="h-meses">
-    <h2 id="h-meses">Mês a mês</h2>
+    <div class="sec-head">
+      <h2 id="h-meses">Mês a mês</h2>
+      <button class="btn ghost sm" type="button" id="export-btn" hidden>Exportar planilha</button>
+    </div>
+    <p class="save" id="export-msg" role="status" aria-live="polite" hidden></p>
     <ol class="months" id="months"><li class="m-empty">Carregando…</li></ol>
   </section>
 

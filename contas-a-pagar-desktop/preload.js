@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const INVOKE = new Set([
   'config:get', 'config:chooseDir', 'config:setKey', 'config:clearKey', 'config:setModel', 'config:testKey',
-  'shell:open', 'folder:open',
+  'shell:open', 'folder:open', 'export:csv',
   'db:list', 'db:get', 'db:set', 'db:update', 'db:delete', 'db:subscribe', 'db:unsubscribe',
   'nota:save', 'nota:ler', 'nota:cancel'
 ]);

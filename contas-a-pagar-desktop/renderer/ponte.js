@@ -82,5 +82,8 @@
     return id;
   }
 
-  C.ponte = { chamar, db, pronto: chamar('config:get').catch(() => null), aoReceber: d.on, lerNota, guardarArquivo };
+  // Pede ao programa a planilha das parcelas: ele pergunta onde salvar. Devolve { arquivo, linhas } ou null se a pessoa cancelar.
+  const exportarPlanilha = () => chamar('export:csv');
+
+  C.ponte = { chamar, db, pronto: chamar('config:get').catch(() => null), aoReceber: d.on, lerNota, guardarArquivo, exportarPlanilha };
 })();

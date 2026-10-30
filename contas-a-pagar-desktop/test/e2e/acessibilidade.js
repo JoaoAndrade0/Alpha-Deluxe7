@@ -53,6 +53,17 @@ async function auditar(win, nome, { plantar = false } = {}) {
   await win.click('[data-compra=c1] .box[data-i="0"]');
   await espera(400);
 
+  // Exportar planilha só pelo teclado (a janela de salvar do sistema é trocada por uma que responde o que o teste manda);
+  // deixa a mensagem de "planilha salva" na tela para ela entrar na auditoria dos dois temas.
+  const pastaCsv = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-export-'));
+  await app.evaluate(({ dialog }, d) => { global.__resp = { canceled: false, filePath: d }; dialog.showSaveDialog = async () => global.__resp; }, path.join(pastaCsv, 'planilha.csv'));
+  await win.focus('#export-btn'); await win.keyboard.press('Enter');
+  await win.waitForFunction(() => !document.querySelector('#export-btn').hasAttribute('aria-busy') && !document.querySelector('#export-msg').hidden, null, { timeout: 15000 });
+  assert.match(await win.textContent('#export-msg'), /^Planilha salva como planilha\.csv/);
+  assert.equal(await win.evaluate(() => document.activeElement.id), 'export-btn', 'o foco continua no botão depois de exportar');
+  assert.equal(await win.getAttribute('#export-msg', 'role'), 'status', 'o resultado é anunciado por leitores de tela');
+  passo('exportar planilha funciona só com o teclado (Enter), o foco fica no botão e o resultado é anunciado como "status"');
+
   for (const tema of ['light', 'dark']) {
     await win.emulateMedia({ colorScheme: tema, reducedMotion: 'reduce' });
     await espera(200);
@@ -63,6 +74,15 @@ async function auditar(win, nome, { plantar = false } = {}) {
     await win.screenshot({ path: path.join(OUT, `configuracoes-${tema}.png`) });
     achados.push(...await auditar(win, 'configurações (' + tema + ')'));
     await win.click('#cfg-close');
+  }
+  // mensagem de erro da exportação (cor de aviso) nos dois temas
+  await app.evaluate(() => { global.__resp = { canceled: false, filePath: '/nao-existe-a11y/planilha.csv' }; });
+  for (const tema of ['light', 'dark']) {
+    await win.emulateMedia({ colorScheme: tema, reducedMotion: 'reduce' });
+    await win.click('#export-btn');
+    await win.waitForFunction(() => !document.querySelector('#export-btn').hasAttribute('aria-busy') && /Não consegui salvar/.test(document.querySelector('#export-msg').textContent), null, { timeout: 15000 });
+    await win.screenshot({ path: path.join(OUT, `exportacao-erro-${tema}.png`), clip: { x: 0, y: 0, width: 1200, height: 700 } });
+    achados.push(...await auditar(win, 'exportação com erro (' + tema + ')'));
   }
   await win.emulateMedia({ colorScheme: 'light' });
 
@@ -116,7 +136,7 @@ async function auditar(win, nome, { plantar = false } = {}) {
   const contrastes = await win.evaluate(() => {
     const lum = c => { const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const fundo = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(255,255,255)'; };
-    const alvo = ['.eyebrow', '.fig .lab', '.when span', '.fld', '.pc small', '.muted', '.save', '.c-note', '.svc-figs', '.up-target'];
+    const alvo = ['.eyebrow', '.fig .lab', '.when span', '.fld', '.pc small', '.muted', '.save', '.c-note', '.svc-figs', '.up-target', '#export-msg'];
     return alvo.map(sel => { const el = document.querySelector(sel); if (!el) return null; const a = lum(getComputedStyle(el).color), b = lum(fundo(el)); return { sel, razao: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) }; }).filter(Boolean);
   });
   for (const c of contrastes) assert.ok(c.razao >= 4.5, c.sel + ' tem contraste ' + c.razao.toFixed(2));
@@ -153,6 +173,6 @@ async function auditar(win, nome, { plantar = false } = {}) {
     for (const a of achados) console.log(` - [${a.impacto}] ${a.id} (${a.estado}, ${a.nos} elemento(s)): ${a.ajuda}\n     ${a.exemplos.join('\n     ')}`);
     process.exit(1);
   }
-  passo('axe-core (WCAG 2.1 AA + boas práticas): nenhuma violação em 8 estados (principal, configurações, vazio e primeira abertura, nos dois temas)');
+  passo('axe-core (WCAG 2.1 AA + boas práticas): nenhuma violação em 10 estados (principal, configurações, vazio, primeira abertura e erro de exportação, nos dois temas)');
   console.log('\nACESSIBILIDADE OK. Capturas em ' + OUT);
 })().catch(e => { console.error('FALHOU:', e); process.exit(1); });

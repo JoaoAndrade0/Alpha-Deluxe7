@@ -36,5 +36,11 @@
   };
   const mensagemDeChave = (e, padrao) => (e && Object.prototype.hasOwnProperty.call(ERROS_DE_CHAVE, e.code) ? ERROS_DE_CHAVE[e.code] : padrao);
 
-  return { mensagemDeNota, mensagemDeChave, PEDE_CONFIGURACAO };
+  const ERROS_DE_EXPORTACAO = {
+    sem_pasta: 'Escolha a pasta de dados em Configurações antes de exportar.',
+    sem_gravar_planilha: 'Não consegui salvar a planilha nesse lugar. Escolha outra pasta, por exemplo Documentos.'
+  };
+  const mensagemDeExportacao = e => (e && Object.prototype.hasOwnProperty.call(ERROS_DE_EXPORTACAO, e.code) ? ERROS_DE_EXPORTACAO[e.code] : 'Não foi possível exportar agora. Tente de novo.');
+
+  return { mensagemDeNota, mensagemDeChave, mensagemDeExportacao, PEDE_CONFIGURACAO };
 });

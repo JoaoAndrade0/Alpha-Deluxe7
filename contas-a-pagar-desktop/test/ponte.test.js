@@ -60,3 +60,10 @@ test('depois de terminar, cancelar não faz mais nada (o ouvinte foi removido)',
   await new Promise(r => setTimeout(r, 20));
   assert.equal(chamadas.filter(c => c[0] === 'nota:cancel').length, 0);
 });
+
+test('exportar planilha: pede ao programa sem mandar nada (nem caminho) e devolve o resultado', async () => {
+  const { ponte, chamadas } = carregar();
+  const r = await ponte.exportarPlanilha();
+  assert.equal(r, true);
+  assert.deepEqual(chamadas.filter(c => c[0] === 'export:csv'), [['export:csv']], 'a tela não manda argumento nenhum: quem escolhe o lugar é o programa');
+});

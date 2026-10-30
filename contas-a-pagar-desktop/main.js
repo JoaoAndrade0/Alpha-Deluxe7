@@ -7,6 +7,7 @@ const { Store } = require('./lib/store');
 const { Config } = require('./lib/config');
 const claude = require('./lib/claude');
 const nota = require('./lib/nota');
+const exportar = require('./lib/exportar');
 const V = require('./lib/validar');
 const { criarLimitador } = require('./lib/limites');
 const M = require('./renderer/lib/meses');
@@ -128,6 +129,25 @@ function registerIpc() {
   });
   handle('shell:open', (e, url) => { openExternal(url); return true; });
   handle('folder:open', () => { if (store) shell.openPath(store.root); return true; });
+
+  // Planilha das parcelas. Quem escolhe onde salvar é a pessoa, na janela do sistema: o caminho nunca vem da tela,
+  // e o arquivo é montado aqui com os dados da pasta compartilhada.
+  handle('export:csv', async () => {
+    const st = await requireStore();
+    let inicio;
+    try { inicio = app.getPath('documents'); } catch (err) { inicio = app.getPath('home'); }
+    const r = await dialog.showSaveDialog(win, {
+      title: 'Salvar planilha das parcelas',
+      defaultPath: path.join(inicio, 'contas-a-pagar-' + M.hojeStr() + '.csv'),
+      filters: [{ name: 'Planilha (CSV)', extensions: ['csv'] }]
+    });
+    if (r.canceled || !r.filePath) return null;
+    const [servicos, compras] = await Promise.all([st.list('servicos'), st.list('compras')]); // dados de agora, não de antes da janela
+    const { texto, linhas } = exportar.gerarCsv(servicos, compras, M.chaveAtual());
+    try { await fsp.writeFile(r.filePath, exportar.comBom(texto)); }
+    catch (err) { throw Object.assign(new Error('Não consegui salvar a planilha nesse lugar.'), { code: 'sem_gravar_planilha' }); }
+    return { arquivo: path.basename(r.filePath), linhas };
+  });
 
   handle('db:list', async (e, coll) => (await requireStore()).list(V.colecao(coll)));
   handle('db:get', async (e, coll, id) => (await requireStore()).get(V.colecao(coll), V.id(id)));
